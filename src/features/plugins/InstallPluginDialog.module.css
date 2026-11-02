@@ -1,0 +1,64 @@
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+
+/* The drop zone is the file input's label: a click browses, a drop takes the file. */
+.drop {
+  display: grid;
+  justify-items: center;
+  gap: var(--s1);
+  padding: var(--s6) var(--s4);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.drop:hover,
+.drop[data-dragging='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.drop:focus-within {
+  box-shadow: var(--focus-ring);
+}
+.drop[data-chosen='true'] {
+  border-style: solid;
+  border-color: var(--accent-line);
+}
+.drop[data-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: var(--s2);
+  color: var(--text-muted);
+}
+.drop[data-chosen='true'] .icon,
+.drop[data-dragging='true'] .icon {
+  color: var(--accent);
+}
+.prompt,
+.fileName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.fileMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.error {
+  margin-top: calc(var(--s2) * -1);
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  gap: var(--s2);
+}

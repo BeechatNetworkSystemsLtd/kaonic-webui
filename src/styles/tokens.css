@@ -1,0 +1,87 @@
+/*
+ * Design tokens. Every colour, size and radius used by the UI comes from here,
+ * so the look can be changed in one place. Components never use raw values.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: warm graphite, darkest at the back. */
+  --bg: #16171b;
+  --surface: #1e2025;
+  --surface-raised: #272a30;
+  --surface-hover: #2e3138;
+  --line: #33363e;
+  --line-strong: #474b55;
+
+  /* Ink */
+  --text: #eeede8;
+  --text-muted: #a3a5ab;
+  --text-faint: #74777f;
+
+  /* Accent: the Kaonic yellow, taken from the logo gradient. */
+  --accent: #f2ca43;
+  --accent-hover: #f7d662;
+  --accent-deep: #e98c31;
+  --accent-ink: #1b1a14; /* text on an accent fill */
+  --accent-soft: rgb(242 202 67 / 0.12);
+  --accent-line: rgb(242 202 67 / 0.4);
+
+  /* Plugin glyphs: each plugin is drawn in one of these, picked from its id. */
+  --glyph-amber: #f2ca43;
+  --glyph-blue: #5aa9f5;
+  --glyph-teal: #4fc4b8;
+  --glyph-violet: #a58cf0;
+
+  /* QR codes stay dark on light whatever the theme, so every scanner reads them. */
+  --qr-ink: #16171b;
+  --qr-paper: #ffffff;
+
+  /* Status. Reserved for state; never used as chart series colours. */
+  --ok: #57c785;
+  /* The Kaonic Admin device, wherever it is shown. */
+  --admin: #b48cf6;
+  --warn: #f0a23b;
+  --danger: #f2695c;
+  --off: #6d7078;
+  --ok-soft: rgb(87 199 133 / 0.14);
+  --warn-soft: rgb(240 162 59 / 0.14);
+  --danger-soft: rgb(242 105 92 / 0.14);
+
+  /* Chart series */
+  --series-tx: #f2ca43;
+  --series-rx: #5aa9f5;
+  /* Traffic that is neither sent nor received by this device. */
+  --series-other: #b9bcc4;
+
+  /* Type. System faces only: the device is offline and serves its own UI. */
+  --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+
+  /* Space (4px grid) */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  /* Layout */
+  --sidebar-w: 248px;
+  --rail-w: 368px;
+  --statusbar-h: 30px;
+  --topbar-h: 52px;
+
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.45);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}

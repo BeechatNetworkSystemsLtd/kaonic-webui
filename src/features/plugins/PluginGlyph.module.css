@@ -1,0 +1,43 @@
+.glyph {
+  --hue: var(--glyph-amber);
+  display: block;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  transition: background 240ms, border-color 240ms;
+}
+.glyph[data-hue='blue'] {
+  --hue: var(--glyph-blue);
+}
+.glyph[data-hue='teal'] {
+  --hue: var(--glyph-teal);
+}
+.glyph[data-hue='violet'] {
+  --hue: var(--glyph-violet);
+}
+
+.cell {
+  fill: var(--off);
+  opacity: 0.45;
+  transition: fill 200ms, opacity 200ms;
+}
+
+.glyph[data-lit='true'] {
+  border-color: color-mix(in srgb, var(--hue) 45%, transparent);
+  background: color-mix(in srgb, var(--hue) 12%, var(--surface-raised));
+}
+.glyph[data-lit='true'] .cell {
+  fill: var(--hue);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph,
+  .cell {
+    transition: none;
+  }
+}

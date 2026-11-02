@@ -1,0 +1,12 @@
+.code {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+.paper {
+  fill: var(--qr-paper);
+}
+.ink {
+  fill: var(--qr-ink);
+}

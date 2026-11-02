@@ -1,0 +1,10 @@
+.list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s5);
+  justify-items: stretch;
+}
+.list > :first-child {
+  justify-self: start;
+  margin-bottom: calc(var(--s2) * -1);
+}

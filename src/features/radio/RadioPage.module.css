@@ -1,0 +1,45 @@
+.band {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+.activity {
+  display: grid;
+  gap: var(--s5);
+  min-width: 0;
+}
+.frames {
+  display: grid;
+  gap: var(--s2);
+}
+.subtitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.off {
+  align-self: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+@container (max-width: 760px) {
+  .band {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-top: var(--s2);
+}
+.rssi {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

@@ -1,0 +1,43 @@
+.chart {
+  display: grid;
+  /* Never wider than the column it sits in, whatever its content asks for. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s2);
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.now {
+  display: flex;
+  flex: none;
+  gap: var(--s2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+/* A fixed, right-aligned slot per rate: the numbers change in place and nothing around them moves. */
+.rate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 6.8em;
+  white-space: nowrap;
+}
+.rate svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  stroke-width: 2.5;
+}

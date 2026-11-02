@@ -1,0 +1,83 @@
+.lead {
+  color: var(--text-muted);
+}
+.lead strong {
+  color: var(--text);
+}
+.section {
+  display: grid;
+  gap: var(--s2);
+}
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.heading {
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+.list {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.list > li + li {
+  border-top: 1px solid var(--line);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  min-height: 48px;
+  padding: var(--s2) var(--s3);
+}
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  /* The name gives way first: it shrinks and wraps, the facts and buttons beside it keep their width. */
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.row > :global(.muted),
+.row > :global(.num) {
+  flex: none;
+}
+.lock {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: var(--text-muted);
+}
+.signal {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-muted);
+}
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  flex: none;
+  margin-left: auto;
+}
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+.formActions {
+  display: flex;
+  gap: var(--s2);
+}
+.withButton {
+  display: flex;
+  gap: var(--s2);
+}
+.withButton > input {
+  flex: 1;
+  min-width: 0;
+}

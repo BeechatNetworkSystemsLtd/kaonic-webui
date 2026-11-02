@@ -1,0 +1,14 @@
+.rail {
+  display: grid;
+  align-content: start;
+}
+.section {
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.title {
+  font-size: var(--text-md);
+  font-weight: 650;
+}

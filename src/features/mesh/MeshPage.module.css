@@ -1,0 +1,127 @@
+/*
+ * The page is exactly as large as the middle column: nothing to scroll. It is
+ * pinned to the column's edges rather than sized in percent, which does not
+ * depend on how a browser resolves percentage heights inside a grid.
+ */
+.stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /*
+   * The map stacks its nodes with large z-indexes (nearer devices on top). This
+   * keeps that ordering inside the map, so it can never paint over the header,
+   * the menu drawer or the traffic drawer.
+   */
+  isolation: isolate;
+  /* Dragging across the map must turn it, not select the title, the legend or the node labels. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.message {
+  max-width: 560px;
+  padding: var(--s5);
+}
+
+/* ── Overlays on the map ── */
+.heading,
+.legend {
+  position: absolute;
+  left: var(--s5);
+  z-index: 2000;
+  /* Drags and wheel pass through to the map underneath. */
+  pointer-events: none;
+}
+.heading {
+  top: var(--s5);
+  display: grid;
+  gap: var(--s1);
+  justify-items: start;
+}
+.title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.count {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.asking {
+  margin-top: var(--s2);
+  padding: var(--s1) var(--s3);
+  border: 1px solid var(--accent-line);
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.asking:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.legend {
+  bottom: var(--s4);
+  /* Leave the corner to the zoom buttons. */
+  right: 64px;
+}
+
+/* ── Popup content ── */
+.popup {
+  display: grid;
+  gap: var(--s3);
+  justify-items: start;
+}
+.popup > dl {
+  width: 100%;
+}
+.popupHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  margin: calc(var(--s1) * -1) calc(var(--s2) * -1) 0 0;
+}
+.popupTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.popupSub {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.hash {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+.popupActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+}
+.popupLink {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+.popupLink:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 859px) {
+  .heading,
+  .legend {
+    left: var(--s4);
+  }
+  .heading {
+    top: var(--s4);
+  }
+}

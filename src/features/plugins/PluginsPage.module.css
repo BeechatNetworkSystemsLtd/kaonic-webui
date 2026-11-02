@@ -1,0 +1,130 @@
+.summary {
+  margin-bottom: var(--s3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.list > li + li {
+  border-top: 1px solid var(--line);
+}
+
+.plugin {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s4);
+  padding: var(--s4);
+}
+
+.text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+.byline {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+.description {
+  margin-top: var(--s1);
+  max-width: 60ch;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.failure {
+  margin-top: var(--s1);
+  font-size: var(--text-sm);
+  color: var(--danger);
+}
+
+.controls {
+  display: grid;
+  justify-items: end;
+  gap: var(--s3);
+}
+.run {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  white-space: nowrap;
+}
+
+/* The way into a plugin's own page: a button, since it is the main thing to do with a running plugin. */
+.open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 120ms;
+}
+.open:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.hint {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+/* Narrow screens: the controls move under the text, spread across the row. */
+@media (max-width: 640px) {
+  .plugin {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .controls {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+/* A plugin that was just installed or updated glows once, so the eye finds it. */
+.plugin[data-fresh='true'] {
+  animation: fresh 2.4s ease-out;
+}
+@keyframes fresh {
+  from {
+    background: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  to {
+    background: transparent;
+    box-shadow: inset 3px 0 0 transparent;
+  }
+}
+
+.icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+.external {
+  width: 14px;
+  height: 14px;
+  margin-left: var(--s1);
+}
+.manage {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  align-items: center;
+  gap: var(--s2);
+}

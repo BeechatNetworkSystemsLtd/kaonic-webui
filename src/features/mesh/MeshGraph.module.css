@@ -1,0 +1,377 @@
+.graph {
+  position: relative;
+  width: 100%;
+  /* The map fills the box it is put in. */
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+  /* Every touch gesture belongs to the map: drag turns it, pinch zooms. */
+  touch-action: none;
+}
+.graph[data-dragging] {
+  cursor: grabbing;
+}
+.graph:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--radius);
+}
+/*
+ * The radar sweep. `.sweepSpace` is the camera (the map sets its viewing
+ * distance and vanishing point), `.sweep` is the mesh plane tipped back in 3D,
+ * and the beam inside turns around the centre. Only a transform is animated,
+ * which the browser does without repainting, so the sweep costs next to nothing
+ * while it runs.
+ */
+.sweepSpace {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sweep {
+  position: absolute;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.beam {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  /* A fading trail behind a brighter leading edge. */
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 250deg,
+    color-mix(in srgb, var(--accent) 0.6%, transparent) 290deg,
+    color-mix(in srgb, var(--accent) 3%, transparent) 358deg,
+    var(--accent-soft) 359.6deg,
+    transparent 360deg
+  );
+  animation: sweep 7s linear infinite;
+}
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sweepSpace {
+    display: none;
+  }
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ring {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+.ring[data-lost] {
+  stroke-dasharray: 3 6;
+}
+.ringLabel {
+  fill: var(--text-faint);
+  font-size: 11px;
+  /* A halo in the page colour keeps the label readable where a line passes under it. */
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 4px;
+}
+/* A link is a faint track. The balls that run along it are painted on the canvas. */
+.track {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  opacity: 0.35;
+}
+.track[data-lit] {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+.traffic {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* A node is a zero-size anchor at its position: the dot is centred on it and the label hangs below. */
+.node {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  --node-color: var(--line-strong);
+  --depth-scale: 1;
+  --depth-fade: 1;
+  opacity: var(--depth-fade);
+}
+.node[data-selected],
+.node:hover,
+.node[data-state='self'] {
+  opacity: 1;
+}
+.node:focus-visible {
+  box-shadow: none;
+}
+/*
+ * A node is a hexagon. A clipped element cannot have a border (the clip cuts it
+ * off), so the hexagon is two layers: the outer one in the outline colour, and
+ * a slightly smaller one on top of it in the fill colour.
+ */
+.dot,
+.dot::before,
+.node::before {
+  clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%);
+}
+.dot {
+  --outline: max(1.5px, calc(var(--node) / 15));
+  --fill: var(--surface-raised);
+  position: absolute;
+  /* `--node` is the node's height, set by the map from the zoom level. */
+  left: calc(var(--node) / -2);
+  top: calc(var(--node) / -2);
+  display: grid;
+  place-items: center;
+  width: var(--node);
+  height: var(--node);
+  background: var(--node-color);
+  color: var(--text-muted);
+  transform: scale(var(--depth-scale));
+}
+.dot::before {
+  content: '';
+  position: absolute;
+  inset: var(--outline);
+  background: var(--fill);
+}
+.dot svg {
+  position: relative;
+  width: 34%;
+  height: 34%;
+}
+.node:hover .dot {
+  --fill: var(--surface-hover);
+}
+/* The halo behind a selected or focused node: a larger hexagon of the same shape. */
+.node::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--node) * -0.75);
+  top: calc(var(--node) * -0.75);
+  width: calc(var(--node) * 1.5);
+  height: calc(var(--node) * 1.5);
+  background: transparent;
+  transform: scale(var(--depth-scale));
+}
+.node[data-selected]::before {
+  background: var(--accent-line);
+}
+.node:focus-visible::before {
+  background: var(--accent);
+}
+.node[data-state='self']::before {
+  left: calc(var(--node) * -0.9);
+  top: calc(var(--node) * -0.9);
+  width: calc(var(--node) * 1.8);
+  height: calc(var(--node) * 1.8);
+}
+.node[data-state='self'] .dot {
+  /* This device is a quarter larger than the others. */
+  left: calc(var(--node) * -0.625);
+  top: calc(var(--node) * -0.625);
+  width: calc(var(--node) * 1.25);
+  height: calc(var(--node) * 1.25);
+  --fill: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.node[data-state='trusted'] {
+  --node-color: var(--ok);
+}
+.node[data-state='trusted'] .dot {
+  color: var(--ok);
+}
+.node[data-state='joining'] {
+  --node-color: var(--accent);
+}
+/* The Kaonic Admin, this device or a peer, in its own colour whatever its other state. */
+.node[data-admin] {
+  --node-color: var(--admin);
+}
+.node[data-admin] .dot {
+  color: var(--admin);
+}
+.node[data-state='joining'] .dot {
+  color: var(--accent);
+}
+/* Out of range: hollow and faded, the outline of a device that is not there right now. */
+.node[data-lost] .dot {
+  --fill: var(--bg);
+}
+.node[data-lost]:not(:hover, [data-selected]) {
+  opacity: calc(var(--depth-fade) * 0.6);
+}
+.label {
+  position: absolute;
+  top: calc(var(--node) / 2 + 3px);
+  left: 0;
+  transform: translateX(-50%);
+  /* In a crowd only the labels that fit are shown (see labelLayout.ts); pointing at a device always shows its own. */
+  display: none;
+  justify-items: center;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--text);
+  /* Labels sit on top of rings and links: a soft halo keeps them legible. */
+  text-shadow: 0 0 4px var(--bg), 0 0 4px var(--bg), 0 0 8px var(--bg);
+  pointer-events: none;
+}
+.node[data-state='self'] .label {
+  top: calc(var(--node) * 0.625 + 3px);
+}
+.node[data-labelled] .label,
+.node:hover .label,
+.node[data-selected] .label {
+  display: grid;
+}
+.node[data-lost] .label {
+  color: var(--text-muted);
+}
+/* The second line (tag) appears for the device you point at or have selected; the map stays readable. */
+.sub {
+  display: none;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+.node:hover .sub,
+.node[data-selected] .sub,
+.node[data-state='self'][data-labelled] .sub {
+  display: block;
+}
+.node:hover,
+.node[data-selected] {
+  z-index: 1500 !important;
+}
+
+/* ── Details popup ── */
+.popup {
+  position: absolute;
+  z-index: 2500;
+  overflow-y: auto;
+  padding: var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-pop);
+  cursor: default;
+  /* The one exception: an identity or an address in the popup is worth copying. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ── View controls ── */
+.controls {
+  position: absolute;
+  right: var(--s2);
+  bottom: var(--s2);
+  z-index: 2000;
+  display: grid;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: default;
+}
+.controls button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.controls button:hover:not(:disabled) {
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.controls svg {
+  width: 16px;
+  height: 16px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* Legend keys are small copies of the nodes: an outlined hexagon, built the same way. */
+.key {
+  --outline-color: var(--line-strong);
+  --fill: var(--surface-raised);
+  position: relative;
+  width: 13px;
+  height: 14px;
+  background: var(--outline-color);
+}
+.key,
+.key::before {
+  clip-path: polygon(50% 0, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%);
+}
+.key::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--fill);
+}
+.key[data-state='self'] {
+  --outline-color: var(--accent);
+  --fill: var(--accent);
+}
+.key[data-state='trusted'] {
+  --outline-color: var(--ok);
+}
+.key[data-state='joining'] {
+  --outline-color: var(--accent);
+}
+.key[data-state='admin'] {
+  --outline-color: var(--admin);
+  --fill: var(--admin);
+}
+.key[data-lost] {
+  --fill: var(--bg);
+  opacity: 0.6;
+}
+.flowKey {
+  width: 6px;
+  height: 6px;
+  margin: 0 3px;
+  border-radius: 50%;
+}

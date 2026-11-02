@@ -1,0 +1,138 @@
+.screen {
+  /* Pinned to the screen and scrolling inside itself, like the app shell. */
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  display: grid;
+  padding: var(--s4);
+  /* The one decorative touch: a faint glow in the brand yellow behind the card. */
+  background: radial-gradient(60rem 30rem at 50% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%), var(--bg);
+}
+.card {
+  display: grid;
+  gap: var(--s5);
+  width: 100%;
+  max-width: 440px;
+  /* Centred when there is room; when the card is taller than the screen it starts at the top and scrolls. */
+  margin: auto;
+  padding: var(--s6) var(--s5);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.logo {
+  height: 34px;
+  justify-self: start;
+}
+.title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+.description {
+  margin-top: var(--s2);
+  color: var(--text-muted);
+}
+.form {
+  display: grid;
+  gap: var(--s4);
+}
+.actions {
+  display: flex;
+  gap: var(--s3);
+  justify-content: space-between;
+}
+
+/* Setup steps */
+.steps {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.stepBars {
+  display: flex;
+  gap: var(--s1);
+  flex: 1;
+}
+.stepBar {
+  height: 3px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--line);
+}
+.stepBar[data-done='true'] {
+  background: var(--accent);
+}
+
+/* An identity hash shown for the user to check or pass on */
+.identity {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: var(--text-md);
+  letter-spacing: 0.04em;
+  overflow-wrap: anywhere;
+}
+.join {
+  display: grid;
+  gap: var(--s3);
+  justify-items: center;
+}
+.join .identity {
+  justify-self: stretch;
+  text-align: center;
+}
+
+/* Codename input with its "make up another" button */
+.codename {
+  display: flex;
+  gap: var(--s2);
+}
+.codename > input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The way to the guide, under every card shown before signing in. */
+.guideLink {
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.guideLink a {
+  color: var(--accent);
+}
+.list {
+  margin: 0;
+  padding-left: var(--s5);
+  display: grid;
+  gap: var(--s1);
+}
+.muted {
+  color: var(--text-muted);
+}
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s2);
+}
+.forgot {
+  justify-self: center;
+  background: none;
+  border: none;
+  padding: var(--s1);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-sm, 13px);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.forgot:hover {
+  color: var(--text);
+}

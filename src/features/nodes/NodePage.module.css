@@ -1,0 +1,72 @@
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: 36px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent);
+}
+.back:hover {
+  text-decoration: underline;
+}
+.back svg {
+  width: 16px;
+  height: 16px;
+}
+.hash {
+  font-size: 0.6875rem;
+}
+.link {
+  color: var(--accent);
+}
+.link:hover {
+  text-decoration: underline;
+}
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s4);
+}
+.pad {
+  padding: var(--s4);
+}
+.jobs {
+  display: grid;
+  gap: var(--s3);
+}
+.jobs li {
+  display: grid;
+  gap: 2px;
+}
+.jobName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.bands > li + li {
+  border-top: 1px solid var(--line);
+}
+.band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  min-height: 52px;
+  padding: var(--s2) var(--s4);
+}
+.bandName {
+  flex: 0 0 150px;
+  font-weight: 600;
+}
+.bandConfig {
+  flex: 1 1 200px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.adminNote {
+  color: var(--admin);
+  font-size: 13px;
+  font-weight: 600;
+}
