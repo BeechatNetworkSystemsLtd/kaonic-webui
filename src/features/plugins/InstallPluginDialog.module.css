@@ -62,3 +62,54 @@
   display: flex;
   gap: var(--s2);
 }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+}
+
+/* What the device read from the package. */
+.summary {
+  display: grid;
+  gap: var(--s1);
+  padding: var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.summaryName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-md);
+  font-weight: 650;
+}
+.asks {
+  margin-top: var(--s1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.permissions {
+  display: grid;
+  gap: var(--s1);
+}
+.permissions > li {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.permissions > li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+/* Root is the one right that can do anything: it stands out. */
+.permissions > li[data-permission='root'] {
+  padding: var(--s1) var(--s2);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text);
+}
+.permissions > li[data-permission='root'] strong {
+  color: var(--warn);
+}

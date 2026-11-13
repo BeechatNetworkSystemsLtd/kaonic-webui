@@ -128,3 +128,80 @@
   align-items: center;
   gap: var(--s2);
 }
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+/* What the plugin may use beyond its own folder. */
+.permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s2);
+  margin-top: var(--s2);
+}
+.permissions > li {
+  padding: 2px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.permissions > li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.permissions > li[data-permission='root'] {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+.permissions > li[data-permission='root'] strong {
+  color: var(--warn);
+}
+.kept {
+  margin-top: var(--s1);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.removeConfirm {
+  display: grid;
+  justify-items: end;
+  gap: var(--s2);
+}
+.keep {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+}
+
+/* Signed plugins only */
+.policy {
+  display: grid;
+  gap: var(--s3);
+}
+.policyRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.policyName {
+  font-weight: 600;
+}
+.policyHint {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.confirm {
+  display: grid;
+  gap: var(--s3);
+  max-width: 420px;
+}
+.buttons {
+  display: flex;
+  gap: var(--s2);
+}

@@ -556,6 +556,129 @@ describe('remote management', () => {
   });
 });
 
+describe('plugins and software', () => {
+  const plugin = {
+    id: 'audio-ptt',
+    name: 'Push to talk',
+    version: '0.3.0',
+    description: 'Voice.',
+    developer: 'Beechat Network',
+    official: true,
+    running: true,
+    enabled: true,
+    removable: true,
+    has_icon: false,
+    app_url: '/apps/audio-ptt/',
+    channel: 'stable',
+    url: null,
+    permissions: ['audio', 'realtime'],
+    service: 'kaonic-plugin-audio-ptt.service',
+    installed_ts: 1000,
+    highest_version: '0.3.0',
+    previous_version: '0.2.1',
+  } as const;
+
+  it('maps plugins, their actions, removal with kept data and page tickets', async () => {
+    const { api, calls } = makeApi({
+      'GET /auth/state': { body: AUTH },
+      'GET /plugins': { body: [plugin] },
+      'POST /plugins/audio-ptt/rollback': { body: { ...plugin, version: '0.2.1', previous_version: '0.3.0' } },
+      'DELETE /plugins/audio-ptt?keep_data=true': { status: 204 },
+      'POST /plugins/audio-ptt/open': { body: { url: '/apps/audio-ptt/~abc/', expires_in_secs: 43200 } },
+    });
+
+    expect(await api.plugins.list()).toEqual([
+      {
+        id: 'audio-ptt',
+        name: 'Push to talk',
+        version: '0.3.0',
+        description: 'Voice.',
+        developer: 'Beechat Network',
+        official: true,
+        running: true,
+        enabled: true,
+        removable: true,
+        hasIcon: false,
+        appUrl: '/apps/audio-ptt/',
+        channel: 'stable',
+        url: null,
+        permissions: ['audio', 'realtime'],
+        service: 'kaonic-plugin-audio-ptt.service',
+        installedTs: 1000,
+        highestVersion: '0.3.0',
+        previousVersion: '0.2.1',
+      },
+    ]);
+    expect(await api.plugins.act('audio-ptt', 'rollback')).toMatchObject({ version: '0.2.1', previousVersion: '0.3.0' });
+    await api.plugins.remove('audio-ptt', true);
+    expect(calls.at(-1)!.path).toBe('/plugins/audio-ptt?keep_data=true');
+    expect(await api.plugins.open('audio-ptt')).toEqual({ url: '/apps/audio-ptt/~abc/', expiresInSecs: 43200 });
+  });
+
+  it('sends packages with the password and the downgrade switch', async () => {
+    const { api, calls } = makeApi({
+      'GET /auth/state': { body: AUTH },
+      'POST /plugins': { body: { action: 'installed', plugin } },
+      'PUT /plugins/audio-ptt/package': { status: 409, body: { code: 'downgrade', message: 'audio-ptt 0.1.0 is older than 0.3.0 installed before' } },
+      'POST /plugin-check': { body: { id: 'audio-ptt', name: 'Push to talk', version: '0.4.0', developer: 'Beechat Network', description: 'Voice.', permissions: ['audio', 'root'], page: true, signed: false, installed: '0.3.0' } },
+      'POST /software/hub': { status: 202, body: { id: 3, version: '1.5.0', state: 'running', message: '', started: 50, finished: null } },
+    });
+    const file = new File(['tar'], 'audio-ptt-0.3.0.kpkg');
+
+    expect((await api.plugins.install(file, { password: 'pw' })).action).toBe('installed');
+    expect(calls.at(-1)!.body).toEqual({ file: 'file:audio-ptt-0.3.0.kpkg', password: 'pw' });
+    await expect(api.plugins.update('audio-ptt', file, { password: 'pw' })).rejects.toMatchObject({ code: 'conflict', reason: 'downgrade' });
+    expect(await api.plugins.check(file)).toEqual({
+      id: 'audio-ptt',
+      name: 'Push to talk',
+      version: '0.4.0',
+      developer: 'Beechat Network',
+      description: 'Voice.',
+      permissions: ['audio', 'root'],
+      hasPage: true,
+      signed: false,
+      installed: '0.3.0',
+    });
+    // The check needs no password.
+    expect(calls.at(-1)!.body).toEqual({ file: 'file:audio-ptt-0.3.0.kpkg' });
+    expect(await api.software.updateHub(file, { password: 'pw', allowDowngrade: true })).toEqual({ id: 3, version: '1.5.0', state: 'running', message: '', started: 50, finished: null });
+    expect(calls.at(-1)!.body).toEqual({ file: 'file:audio-ptt-0.3.0.kpkg', password: 'pw', allow_downgrade: 'true' });
+  });
+
+  it('tells a stopped installer apart, and reads the policy, software and history', async () => {
+    const { api, calls } = makeApi({
+      'GET /auth/state': { body: AUTH },
+      'GET /plugins': { status: 503, body: { code: 'installer_unavailable', message: 'The plugin installer is not running. Try again in a moment.' } },
+      'GET /plugin-policy': { body: { require_signed: false, release_key: false } },
+      'PUT /plugin-policy': { body: { require_signed: true } },
+      'GET /software': {
+        body: {
+          hub: { version: '1.4.0', from_update: true },
+          installer: { version: '1.0.2', reachable: true },
+          core: [],
+          hub_update: { id: 2, version: '1.5.0', state: 'failed', message: '1.5.0 did not come up; 1.4.0 is back', started: 10, finished: 140 },
+          release_key: false,
+        },
+      },
+      'GET /software/history?id=kaonic-hub&limit=5': { body: [{ time: 140, id: 'kaonic-hub', action: 'upgrade', outcome: 'rolled_back', from: '1.4.0', to: '1.5.0', signed: true, message: 'did not come up' }] },
+    });
+
+    await expect(api.plugins.list()).rejects.toMatchObject({ code: 'unavailable', reason: 'installer_unavailable' });
+    expect(await api.plugins.policy()).toEqual({ requireSigned: false, releaseKey: false });
+    expect(await api.plugins.setPolicy(true, 'pw')).toEqual({ requireSigned: true, releaseKey: null });
+    expect(calls.at(-1)!.body).toEqual({ require_signed: true, password: 'pw' });
+    expect(await api.software.state()).toEqual({
+      hub: { version: '1.4.0', fromUpdate: true },
+      installer: { version: '1.0.2', reachable: true },
+      hubUpdate: { id: 2, version: '1.5.0', state: 'failed', message: '1.5.0 did not come up; 1.4.0 is back', started: 10, finished: 140 },
+      releaseKey: false,
+    });
+    expect(await api.software.history({ id: 'kaonic-hub', limit: 5 })).toEqual([
+      { time: 140, id: 'kaonic-hub', action: 'upgrade', outcome: 'rolled_back', from: '1.4.0', to: '1.5.0', signed: true, actor: null, message: 'did not come up' },
+    ]);
+  });
+});
+
 describe('live topics', () => {
   afterEach(() => vi.useRealTimers());
 

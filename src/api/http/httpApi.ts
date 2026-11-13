@@ -1,6 +1,6 @@
 import type { HubApi } from '../client';
 import { ApiError } from '../errors';
-import type { HubEvents, HubTopic, NodeJob, Peer, PttKeyResult, WifiScanEntry } from '../types';
+import type { HubEvents, HubTopic, NodeJob, PackageUpload, Peer, PttKeyResult, WifiScanEntry } from '../types';
 import {
   fromRadioConfig,
   fromSetupInput,
@@ -21,7 +21,11 @@ import {
   toPttSession,
   toPttSettings,
   toPttTestWav,
+  toHubUpdate,
   toPlugin,
+  toPluginPolicy,
+  toSoftware,
+  toSoftwareEvent,
   toScanEntry,
   toScanResults,
   toService,
@@ -51,7 +55,13 @@ import type {
   WireNetworkPatch,
   WireNetworkState,
   WirePeer,
+  WireHubJob,
   WirePlugin,
+  WirePluginCheck,
+  WirePluginPolicy,
+  WirePluginTicket,
+  WireSoftware,
+  WireSoftwareEvent,
   WirePttDevices,
   WirePttSession,
   WirePttSettings,
@@ -80,7 +90,7 @@ import type {
 
 /*
  * `HubApi` over the hub's REST API and events WebSocket
- * (`kaonic-hub/docs/api/openapi.yaml`).
+ * (`kaonic-hub/docs/api/hub-api.yaml`).
  *
  * - The CSRF token comes with the auth state and is kept in memory, never in
  *   storage. A write made before it is known fetches it first, and a write the
@@ -121,6 +131,11 @@ function defaultEventsUrl(topics: string[]): string {
   const query = topics.length > 0 ? `?topics=${topics.map(encodeURIComponent).join(',')}` : '';
   return `${scheme}//${location.host}${BASE_URL}/events${query}`;
 }
+
+/** Installs check, unpack and start the plugin and wait for it to stay up (30 s on the device). */
+const SLOW_MS = 120_000;
+/** An installer update waits up to two minutes for the new installer, then puts the old one back. */
+const INSTALLER_UPDATE_MS = 180_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -209,16 +224,25 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
   }
 
   /** A request that changes something: needs the session's CSRF token. */
-  async function write<T>(method: string, url: string, body?: unknown): Promise<T> {
+  async function write<T>(method: string, url: string, body?: unknown, requestOptions?: { timeoutMs?: number }): Promise<T> {
     if (!transport.csrfToken()) await authState();
     try {
-      return await transport.request<T>(method, url, body);
+      return await transport.request<T>(method, url, body, requestOptions);
     } catch (error) {
       // Signed in again in another tab: the token rotated. Fetch it and try once more.
       if (!(error instanceof ApiError) || error.reason !== 'csrf_failed') throw error;
       await authState();
-      return transport.request<T>(method, url, body);
+      return transport.request<T>(method, url, body, requestOptions);
     }
+  }
+
+  /** A package upload: the file, the password again, and the downgrade switch when set. */
+  function packageForm(file: File, upload: PackageUpload): FormData {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('password', upload.password);
+    if (upload.allowDowngrade) form.append('allow_downgrade', 'true');
+    return form;
   }
 
   /** Keying: a taken floor (409) is an answer, not an error. */
@@ -341,6 +365,7 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
     },
 
     system: {
+      report: async () => (await transport.download('/system/report')).text(),
       metrics: async () => toMetrics(await get<WireSystemMetrics>('/system/metrics')),
       services: async () => (await get<{ services: WireServiceStatus[] }>('/system/services')).services.map(toService),
       restartService: async (unit) => toService(await write<WireServiceStatus>('POST', path`/system/services/${unit}/restart`)),
@@ -493,17 +518,54 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
 
     plugins: {
       list: async () => (await get<WirePlugin[]>('/plugins')).map(toPlugin),
-      setRunning: async (id, running) => toPlugin(await write<WirePlugin>('POST', path`/plugins/${id}/${running ? 'start' : 'stop'}`)),
-      async install(file, password) {
-        const form = new FormData();
-        form.append('file', file);
-        form.append('password', password);
-        const result = await write<{ action: 'installed' | 'updated'; plugin: WirePlugin }>('POST', '/plugins', form);
+      act: async (id, action) => toPlugin(await write<WirePlugin>('POST', path`/plugins/${id}/${action}`)),
+      async install(file, upload) {
+        const result = await write<{ action: 'installed' | 'updated'; plugin: WirePlugin }>('POST', '/plugins', packageForm(file, upload), { timeoutMs: SLOW_MS });
         return { action: result.action, plugin: toPlugin(result.plugin) };
       },
-      restart: async (id) => toPlugin(await write<WirePlugin>('POST', path`/plugins/${id}/restart`)),
-      async remove(id) {
-        await write<unknown>('DELETE', path`/plugins/${id}`);
+      update: async (id, file, upload) => toPlugin(await write<WirePlugin>('PUT', path`/plugins/${id}/package`, packageForm(file, upload), { timeoutMs: SLOW_MS })),
+      async remove(id, keepData) {
+        await write<unknown>('DELETE', path`/plugins/${id}` + (keepData ? '?keep_data=true' : ''));
+      },
+      async open(id) {
+        const ticket = await write<WirePluginTicket>('POST', path`/plugins/${id}/open`);
+        return { url: ticket.url, expiresInSecs: ticket.expires_in_secs };
+      },
+      async check(file) {
+        const form = new FormData();
+        form.append('file', file);
+        const info = await write<WirePluginCheck>('POST', '/plugin-check', form, { timeoutMs: SLOW_MS });
+        return {
+          id: info.id,
+          name: info.name,
+          version: info.version,
+          developer: info.developer,
+          description: info.description ?? '',
+          permissions: info.permissions ?? [],
+          hasPage: info.page,
+          signed: info.signed,
+          installed: info.installed ?? null,
+        };
+      },
+      policy: async () => toPluginPolicy(await get<WirePluginPolicy>('/plugin-policy')),
+      // The answer to a change does not say whether there is a release key: the caller keeps what it knew.
+      setPolicy: async (requireSigned, password) => toPluginPolicy(await write<WirePluginPolicy>('PUT', '/plugin-policy', { require_signed: requireSigned, password })),
+    },
+
+    software: {
+      state: async () => toSoftware(await get<WireSoftware>('/software')),
+      updateHub: async (file, upload) => toHubUpdate(await write<WireHubJob>('POST', '/software/hub', packageForm(file, upload), { timeoutMs: SLOW_MS })),
+      async updateInstaller(file, upload) {
+        // The hub answers once the new installer is up, or the old one is back: up to two minutes.
+        const record = await write<{ version?: string }>('POST', '/software/installer', packageForm(file, upload), { timeoutMs: INSTALLER_UPDATE_MS });
+        return { version: record.version ?? '' };
+      },
+      async history(filter = {}) {
+        const query = new URLSearchParams();
+        if (filter.id) query.set('id', filter.id);
+        if (filter.limit !== undefined) query.set('limit', String(filter.limit));
+        const search = query.toString();
+        return (await get<WireSoftwareEvent[]>(`/software/history${search ? `?${search}` : ''}`)).map(toSoftwareEvent);
       },
     },
 

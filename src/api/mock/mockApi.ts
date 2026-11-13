@@ -20,7 +20,8 @@ import type {
   NodeJob,
   NodeList,
   Peer,
-  Plugin,
+  PackageUpload,
+  PluginAction,
   RadioBand,
   RadioBandStats,
   RadioConfig,
@@ -53,7 +54,8 @@ import { checkAdvertised, checkGateway, checkSharePatch, checkUplink, type Field
 import { createMockPtt } from './mockPtt';
 import { createMockShell } from './mockShell';
 import { DEFAULT_PTT_SETTINGS } from '../pttSettings';
-import { DEFAULT_SWITCHES, seedPeers, seedPlugins, seedRadio, seedServices } from './seed';
+import { createMockPlugins } from './mockPlugins';
+import { DEFAULT_SWITCHES, seedPeers, seedRadio, seedServices } from './seed';
 
 /*
  * An in-browser stand-in for the hub. It keeps enough state to walk through
@@ -78,6 +80,12 @@ export interface MockOptions {
   storage?: KeyValueStore;
   /** Interval of the live topics, in ms. */
   tickMs?: number;
+  /** False: a development device, without a release key. */
+  releaseKey?: boolean;
+  /** False: the plugin installer is not running. */
+  installerRunning?: boolean;
+  /** How long a hub update takes to restart the hub, in ms. */
+  hubRestartMs?: number;
 }
 
 /** The mock device's serial number, as on its label. */
@@ -99,7 +107,6 @@ const BOOT_IDENTITY_KEY = 'kaonic-mock-boot-identity';
 const CODENAME_PATTERN = /^[a-z0-9]{8}$/;
 const MIN_PASSWORD = 8;
 const MIN_SEED_PASSWORD = 12;
-const PLUGIN_PACKAGE_EXTENSION = '.zip';
 
 const randomIdentity = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
@@ -151,6 +158,17 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     else storage.removeItem(STORAGE_KEY);
   }
 
+  /** Plugins, the hub's and the installer's updates, and their history. */
+  const installer = createMockPlugins({
+    checkPassword(password) {
+      // A wrong password here is a mistake in a form, not a lost session.
+      if (password !== persisted?.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
+    },
+    releaseKey: options.releaseKey,
+    installerRunning: options.installerRunning,
+    hubRestartMs: options.hubRestartMs,
+  });
+
   function bootIdentity(): string {
     let identity = storage.getItem(BOOT_IDENTITY_KEY);
     if (!identity) {
@@ -193,7 +211,6 @@ export function createMockApi(options: MockOptions = {}): HubApi {
   }
   let peers = seedPeers();
   let services = seedServices();
-  let plugins = seedPlugins();
   const enabledSources = new Set<SourceId>();
   const enabledConsumers = new Set<ConsumerId>();
 
@@ -215,6 +232,15 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       await wait();
       if (!persisted?.loggedIn) throw new ApiError('unauthenticated', 'Sign in to continue.');
       return clone(handler(...args));
+    };
+  }
+
+  /** Like `authed`, for a call that takes the device a while (a package install). */
+  function slow<A extends unknown[], R>(handler: (...args: A) => R): (...args: A) => Promise<R> {
+    const handled = authed(handler);
+    return async (...args) => {
+      for (let step = 0; step < 3; step += 1) await wait();
+      return handled(...args);
     };
   }
 
@@ -353,7 +379,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     radio = seedRadio();
     peers = seedPeers();
     services = seedServices();
-    plugins = seedPlugins();
+    installer.reset();
     resetSwitches();
     resetWifi();
     jobs = [];
@@ -1150,7 +1176,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
         hostname: `kaonic-${persisted!.codename.slice(-4)}`,
         model: 'Kaonic 1S r30',
         identityHash: persisted!.identityHash ?? bootIdentity(),
-        versions: { hub: '1.0.0-dev', os: 'kaonic-os 2026.09', webui: '0.1.0' },
+        versions: { hub: installer.hubVersion(), os: 'kaonic-os 2026.09', webui: '0.1.0' },
         uptimeSecs: uptimeSecs(),
         radioModules: 2,
         isAdmin: (persisted!.mode ?? 'admin') === 'admin',
@@ -1164,6 +1190,29 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     },
 
     system: {
+      // The mock is always the admin once signed in.
+      report: authed(() =>
+        [
+          'Kaonic system report',
+          `  ${'Generated'.padEnd(30)} ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`,
+          '',
+          'Device',
+          `  ${'Model'.padEnd(30)} Kaonic 1S r30`,
+          `  ${'Serial'.padEnd(30)} ${MOCK_SERIAL}`,
+          `  ${'Codename'.padEnd(30)} ${persisted!.codename}`,
+          '',
+          'Kaonic software',
+          `  ${'Hub'.padEnd(30)} ${installer.hubVersion()} (system image)`,
+          `  ${'Web UI'.padEnd(30)} 0.1.0`,
+          '',
+          'OS',
+          `  ${'OS version'.padEnd(30)} kaonic-os 2026.09`,
+          '',
+          'Plugins',
+          ...installer.plugins.list().map((plugin) => `  ${plugin.id.padEnd(30)} ${plugin.version} ${plugin.official ? 'signed' : 'unsigned'}`),
+          '',
+        ].join('\n'),
+      ),
       metrics: authed(metrics),
       services: authed(() => services),
       restartService: authed((unit: string) => {
@@ -1407,60 +1456,23 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       },
     },
     plugins: {
-      list: authed(() => plugins),
-      setRunning: authed((id: string, running: boolean) => {
-        const plugin = plugins.find((candidate) => candidate.id === id);
-        if (!plugin) throw new ApiError('not_found', 'Unknown plugin.');
-        plugin.running = running;
-        plugin.enabled = running;
-        return plugin;
-      }),
-      restart: authed((id: string) => {
-        const plugin = plugins.find((candidate) => candidate.id === id);
-        if (!plugin) throw new ApiError('not_found', 'Unknown plugin.');
-        plugin.running = true;
-        return plugin;
-      }),
-      remove: authed((id: string) => {
-        if (!plugins.some((candidate) => candidate.id === id)) throw new ApiError('not_found', 'Unknown plugin.');
-        plugins = plugins.filter((candidate) => candidate.id !== id);
-      }),
-      async install(file, password) {
-        // Checking the signature and unpacking take the hub a moment.
-        for (let step = 0; step < 4; step += 1) await wait();
-        if (!persisted?.loggedIn) throw new ApiError('unauthenticated', 'Sign in to continue.');
-        if (!file.name.toLowerCase().endsWith(PLUGIN_PACKAGE_EXTENSION)) {
-          throw new ApiError('validation_failed', 'This is not a plugin package.', { file: 'Choose the plugin’s .zip package.' });
-        }
-        if (file.size === 0) throw new ApiError('validation_failed', 'This package is empty.', { file: 'The file is empty. Download the package again.' });
-        if (password.length < 8) throw new ApiError('validation_failed', 'Check the highlighted fields.', { password: 'Wrong password.' });
-        // The real hub reads the id and version from the package's manifest; the mock makes them up from the file name.
-        const base = file.name.slice(0, -PLUGIN_PACKAGE_EXTENSION.length).replace(/[-_]v?\d+(\.\d+)*$/, '');
-        const id = base.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'plugin';
-        const existing = plugins.find((candidate) => candidate.id === id);
-        if (existing) {
-          const [major = 0, minor = 0] = existing.version.split('.').map(Number);
-          existing.version = `${major}.${minor + 1}.0`;
-          return clone({ action: 'updated' as const, plugin: existing });
-        }
-        const plugin: Plugin = {
-          id,
-          name: base.replace(/[-_]+/g, ' ').replace(/^\w/, (first) => first.toUpperCase()),
-          version: '0.1.0',
-          description: `Installed from ${file.name}.`,
-          developer: 'Unknown developer',
-          official: false,
-          running: false,
-          appUrl: null,
-          enabled: false,
-          hasIcon: false,
-          webview: null,
-          channel: null,
-          adopted: false,
-        };
-        plugins = [...plugins, plugin];
-        return clone({ action: 'installed' as const, plugin });
-      },
+      list: authed(() => installer.plugins.list()),
+      act: authed((id: string, action: PluginAction) => installer.plugins.act(id, action)),
+      // Checking, unpacking and starting take the installer a moment.
+      install: slow((file: File, upload: PackageUpload) => installer.plugins.install(file, upload)),
+      check: slow((file: File) => installer.plugins.check(file)),
+      update: slow((id: string, file: File, upload: PackageUpload) => installer.plugins.update(id, file, upload)),
+      remove: authed((id: string, keepData: boolean) => installer.plugins.remove(id, keepData)),
+      open: authed((id: string) => installer.plugins.open(id)),
+      policy: authed(() => installer.plugins.policy()),
+      setPolicy: authed((requireSigned: boolean, password: string) => installer.plugins.setPolicy(requireSigned, password)),
+    },
+
+    software: {
+      state: authed(() => installer.software.state()),
+      updateHub: slow((file: File, upload: PackageUpload) => installer.software.updateHub(file, upload)),
+      updateInstaller: slow((file: File, upload: PackageUpload) => installer.software.updateInstaller(file, upload)),
+      history: authed((filter?: { id?: string; limit?: number }) => installer.software.history(filter)),
     },
 
     events: {

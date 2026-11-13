@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Link, useParams } from 'react-router';
-import { usePlugins } from '@/data/queries';
+import { isApiError } from '@/api';
+import { usePluginTicket, usePlugins } from '@/data/queries';
 import { EmptyState, LoadError, Skeleton } from '@/ui';
 import { isGuestMessage, PLUGIN_SANDBOX, readThemeTokens, type HostMessage } from './bridge';
 import styles from './PluginPage.module.css';
@@ -29,11 +30,17 @@ export default function PluginPage() {
     );
   }
 
-  return <PluginFrame key={plugin.id} name={plugin.name} url={plugin.appUrl} />;
+  return <PluginFrame key={plugin.id} id={plugin.id} name={plugin.name} />;
 }
 
-function PluginFrame({ name, url }: { name: string; url: string }) {
+/**
+ * The page runs sandboxed in an opaque origin, so the session cookie does not come with
+ * what it loads: the hub hands out a ticket URL that does (`POST /plugins/{id}/open`).
+ * A fresh one is asked for on every visit and again shortly before it ends.
+ */
+function PluginFrame({ id, name }: { id: string; name: string }) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const ticket = usePluginTicket(id);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
@@ -47,5 +54,20 @@ function PluginFrame({ name, url }: { name: string; url: string }) {
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  return <iframe ref={frame} className={styles.frame} title={name} src={url} sandbox={PLUGIN_SANDBOX} referrerPolicy="no-referrer" />;
+  if (ticket.isPending) return <div className={styles.message}><Skeleton /></div>;
+  if (ticket.isError) {
+    return (
+      <div className={styles.message}>
+        {isApiError(ticket.error, 'not_found') ? (
+          <EmptyState title={`${name} has no page to show`}>
+            <Link to="/plugins" style={{ color: 'var(--accent)' }}>Go to Plugins</Link>
+          </EmptyState>
+        ) : (
+          <LoadError error={ticket.error} onRetry={() => void ticket.refetch()} />
+        )}
+      </div>
+    );
+  }
+
+  return <iframe ref={frame} className={styles.frame} title={name} src={ticket.data.url} sandbox={PLUGIN_SANDBOX} referrerPolicy="no-referrer" />;
 }

@@ -77,20 +77,117 @@ describe('mock hub', () => {
     const api = fresh();
     await api.auth.setup(setup);
     const before = (await api.plugins.list()).length;
+    const upload = { password: setup.password };
 
-    const first = await api.plugins.install(new File(['zip'], 'weather-station-1.0.0.zip'), 'password-1');
-    expect(first).toMatchObject({ action: 'installed', plugin: { id: 'weather-station', running: false, official: false } });
+    const first = await api.plugins.install(new File(['tar'], 'weather-station-1.0.0.kpkg'), upload);
+    expect(first).toMatchObject({ action: 'installed', plugin: { id: 'weather-station', version: '1.0.0', running: true, official: false, previousVersion: null } });
     expect(await api.plugins.list()).toHaveLength(before + 1);
 
-    const again = await api.plugins.install(new File(['zip'], 'weather-station-1.1.0.zip'), 'password-1');
-    expect(again.action).toBe('updated');
-    expect(again.plugin.version).not.toBe(first.plugin.version);
+    const again = await api.plugins.install(new File(['tar'], 'weather-station-1.1.0.kpkg'), upload);
+    expect(again).toMatchObject({ action: 'updated', plugin: { version: '1.1.0', previousVersion: '1.0.0', highestVersion: '1.1.0' } });
     expect(await api.plugins.list()).toHaveLength(before + 1);
 
-    await expect(api.plugins.install(new File(['x'], 'notes.txt'), 'password-1')).rejects.toMatchObject({ code: 'validation_failed', fields: { file: expect.any(String) } });
+    await expect(api.plugins.install(new File(['x'], 'notes.txt'), upload)).rejects.toMatchObject({ code: 'validation_failed', fields: { file: expect.any(String) } });
+    await expect(api.plugins.install(new File(['tar'], 'weather-station-1.2.0.kpkg'), { password: 'wrong-one' })).rejects.toMatchObject({
+      code: 'validation_failed',
+      fields: { password: expect.any(String) },
+    });
 
-    await api.plugins.remove('weather-station');
+    await api.plugins.remove('weather-station', true);
     expect(await api.plugins.list()).toHaveLength(before);
+    expect((await api.software.history({ id: 'weather-station' })).map((event) => event.action)).toEqual(['remove', 'upgrade', 'install']);
+  });
+
+  it('refuses an older version until the downgrade is allowed, and rolls back', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    const upload = { password: setup.password };
+    await api.plugins.install(new File(['tar'], 'tracker-2.0.0.kpkg'), upload);
+
+    await expect(api.plugins.update('tracker', new File(['tar'], 'tracker-1.0.0.kpkg'), upload)).rejects.toMatchObject({ code: 'conflict', reason: 'downgrade' });
+    const older = await api.plugins.update('tracker', new File(['tar'], 'tracker-1.0.0.kpkg'), { ...upload, allowDowngrade: true });
+    expect(older).toMatchObject({ version: '1.0.0', previousVersion: '2.0.0', highestVersion: '2.0.0' });
+    await expect(api.plugins.update('tracker', new File(['tar'], 'other-1.0.0.kpkg'), upload)).rejects.toMatchObject({ fields: { file: expect.any(String) } });
+
+    const back = await api.plugins.act('tracker', 'rollback');
+    expect(back).toMatchObject({ version: '2.0.0', previousVersion: '1.0.0' });
+    const [latest] = await api.software.history({ id: 'tracker', limit: 1 });
+    expect(latest).toMatchObject({ action: 'rollback', outcome: 'done', from: '1.0.0', to: '2.0.0' });
+  });
+
+  it('keeps unsigned packages out once the policy asks for signed ones', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    await expect(api.plugins.setPolicy(true, 'wrong-one')).rejects.toMatchObject({ code: 'validation_failed' });
+    expect(await api.plugins.policy()).toEqual({ requireSigned: false, releaseKey: true });
+    expect(await api.plugins.setPolicy(true, setup.password)).toEqual({ requireSigned: true, releaseKey: null });
+    await expect(api.plugins.install(new File(['tar'], 'tracker-1.0.0.kpkg'), { password: setup.password })).rejects.toMatchObject({ code: 'forbidden' });
+    const signed = await api.plugins.install(new File(['tar'], 'tracker-1.0.0-signed.kpkg'), { password: setup.password });
+    expect(signed.plugin.official).toBe(true);
+
+    const dev = createMockApi({ latencyMs: 0, storage: memoryStore(), releaseKey: false });
+    await dev.auth.setup(setup);
+    expect((await dev.software.state()).releaseKey).toBe(false);
+    expect((await dev.plugins.policy()).releaseKey).toBe(false);
+    await expect(dev.plugins.setPolicy(true, setup.password)).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('reads a package before it is installed, without the password', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    expect(await api.plugins.check(new File(['tar'], 'mesh-chat-1.2.0-signed.kpkg'))).toMatchObject({
+      id: 'mesh-chat',
+      version: '1.2.0',
+      signed: true,
+      installed: '1.1.0',
+      permissions: ['mesh'],
+      hasPage: true,
+    });
+    expect(await api.plugins.check(new File(['tar'], 'voice-relay-0.1.0.kpkg'))).toMatchObject({ id: 'voice-relay', signed: false, installed: null, permissions: ['audio', 'realtime'] });
+    await expect(api.plugins.check(new File(['x'], 'notes.txt'))).rejects.toMatchObject({ code: 'validation_failed', fields: { file: expect.any(String) } });
+  });
+
+  it('opens a plugin page with a ticket, and says when a plugin has none', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    await expect(api.plugins.open('audio-ptt')).rejects.toMatchObject({ code: 'not_found' });
+    await expect(api.plugins.open('missing')).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('answers 503 for plugins while the installer is down', async () => {
+    const api = createMockApi({ latencyMs: 0, storage: memoryStore(), installerRunning: false });
+    await api.auth.setup(setup);
+    await expect(api.plugins.list()).rejects.toMatchObject({ code: 'unavailable', reason: 'installer_unavailable' });
+    expect((await api.software.state()).installer).toEqual({ version: null, reachable: false });
+  });
+
+  it('updates the hub after a restart, or puts the old one back', async () => {
+    const api = createMockApi({ latencyMs: 0, storage: memoryStore(), hubRestartMs: 0 });
+    await api.auth.setup(setup);
+    const upload = { password: setup.password };
+    const before = (await api.software.state()).hub.version;
+
+    const job = await api.software.updateHub(new File(['tar'], 'kaonic-hub-1.5.0-fail.kpkg'), upload);
+    expect(job).toMatchObject({ version: '1.5.0', state: 'running' });
+    const failed = await api.software.state();
+    expect(failed.hubUpdate).toMatchObject({ id: job.id, state: 'failed', message: `1.5.0 did not come up; ${before} is back` });
+    expect(failed.hub.version).toBe(before);
+
+    const next = await api.software.updateHub(new File(['tar'], 'kaonic-hub-1.5.0.kpkg'), upload);
+    expect((await api.software.state())).toMatchObject({ hub: { version: '1.5.0', fromUpdate: true }, hubUpdate: { id: next.id, state: 'done' } });
+    expect((await api.device.get()).versions.hub).toBe('1.5.0');
+    await expect(api.software.updateHub(new File(['tar'], 'kaonic-hub-1.4.0.kpkg'), upload)).rejects.toMatchObject({ code: 'conflict', reason: 'downgrade' });
+  });
+
+  it('updates the installer, or says why the old one is back', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    const upload = { password: setup.password };
+    expect(await api.software.updateInstaller(new File(['tar'], 'kaonic-hub-installer-1.1.0.kpkg'), upload)).toEqual({ version: '1.1.0' });
+    await expect(api.software.updateInstaller(new File(['tar'], 'kaonic-hub-installer-1.2.0-fail.kpkg'), upload)).rejects.toMatchObject({ reason: 'update_failed' });
+    expect((await api.software.state()).installer.version).toBe('1.1.0');
+    const history = await api.software.history({ id: 'kaonic-hub-installer' });
+    expect(history.map((event) => event.outcome)).toEqual(['rolled_back', 'done']);
   });
 
   it('returns to provisioning after a factory reset', async () => {

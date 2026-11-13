@@ -13,7 +13,11 @@ import {
   type NetworkState,
   type NodeList,
   type Peer,
+  type PackageUpload,
   type Plugin,
+  type PluginAction,
+  type PluginPolicy,
+  type SoftwareState,
   type PttSettings,
   type VpnCaptureOptions,
   type VpnGatewayInput,
@@ -61,6 +65,10 @@ export const keys = {
   release: ['release'] as const,
   jobs: ['jobs'] as const,
   plugins: ['plugins'] as const,
+  pluginPolicy: ['plugin-policy'] as const,
+  pluginTicket: (id: string) => ['plugin-ticket', id] as const,
+  software: ['software'] as const,
+  softwareHistory: ['software-history'] as const,
 };
 
 /** Puts an item a write returned in place of its old copy in a cached list. */
@@ -119,6 +127,8 @@ export function useRestartService() {
 }
 
 export const useReboot = () => useMutation({ mutationFn: api.device.reboot });
+/** The system report, fetched fresh each time (it is copied, not shown). */
+export const useSystemReport = () => useMutation({ mutationFn: api.system.report });
 
 /* ── boot slots and kernel install ── */
 
@@ -395,14 +405,16 @@ export function useSetNodeCodename() {
 
 export const usePlugins = () => useQuery({ queryKey: keys.plugins, queryFn: api.plugins.list });
 
-const PLUGIN_RUNNING = ['plugins', 'running'] as const;
+const PLUGIN_CHANGING = ['plugins', 'changing'] as const;
 
-export function useSetPluginRunning() {
+/** Start, stop, restart or roll back a plugin; the list shows it as it is after. */
+export function usePluginAction() {
   const client = useQueryClient();
   return useMutation({
-    mutationKey: PLUGIN_RUNNING,
-    mutationFn: ({ id, running }: { id: string; running: boolean }) => api.plugins.setRunning(id, running),
+    mutationKey: PLUGIN_CHANGING,
+    mutationFn: ({ id, action }: { id: string; action: PluginAction }) => api.plugins.act(id, action),
     onSuccess: (updated) => replaceById<Plugin>(client, keys.plugins, updated),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.softwareHistory }),
   });
 }
 
@@ -410,38 +422,127 @@ export function useSetPluginRunning() {
 export function useInstallPlugin() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, password }: { file: File; password: string }) => api.plugins.install(file, password),
+    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.plugins.install(file, upload),
     onSuccess: ({ plugin }) =>
       client.setQueryData<Plugin[]>(keys.plugins, (plugins) =>
-        plugins?.some((item) => item.id === plugin.id) ? plugins.map((item) => (item.id === plugin.id ? plugin : item)) : [...(plugins ?? []), plugin],
+        plugins?.some((item) => item.id === plugin.id)
+          ? plugins.map((item) => (item.id === plugin.id ? plugin : item))
+          : [...(plugins ?? []), plugin].sort((a, b) => a.id.localeCompare(b.id)),
       ),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.softwareHistory }),
   });
 }
 
-export function useRestartPlugin() {
+/** Reads what a package is and asks for, before the password is asked for. */
+export const useCheckPluginPackage = () => useMutation({ mutationFn: (file: File) => api.plugins.check(file) });
+
+/** Updates one plugin from a package of that plugin only. */
+export function useUpdatePlugin() {
   const client = useQueryClient();
   return useMutation({
-    mutationKey: PLUGIN_RUNNING,
-    mutationFn: ({ id }: { id: string }) => api.plugins.restart(id),
+    mutationKey: PLUGIN_CHANGING,
+    mutationFn: ({ id, file, upload }: { id: string; file: File; upload: PackageUpload }) => api.plugins.update(id, file, upload),
     onSuccess: (updated) => replaceById<Plugin>(client, keys.plugins, updated),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.softwareHistory }),
   });
 }
 
-/** Removes a plugin, with its settings; the list drops it. */
+/** Removes a plugin, with its data unless `keepData`; the list drops it. */
 export function useRemovePlugin() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.plugins.remove(id),
-    onSuccess: (_, id) => client.setQueryData<Plugin[]>(keys.plugins, (plugins) => plugins?.filter((plugin) => plugin.id !== id)),
+    mutationFn: ({ id, keepData }: { id: string; keepData: boolean }) => api.plugins.remove(id, keepData),
+    onSuccess: (_, { id }) => client.setQueryData<Plugin[]>(keys.plugins, (plugins) => plugins?.filter((plugin) => plugin.id !== id)),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.softwareHistory }),
   });
 }
 
-/** Ids of the plugins being started or stopped right now, so each one shows its own progress. */
+/** The plugins being started, stopped, restarted, rolled back or updated right now, so each one shows its own progress. */
 export const usePluginsChanging = () =>
   useMutationState({
-    filters: { mutationKey: PLUGIN_RUNNING, status: 'pending' },
-    select: (mutation) => (mutation.state.variables as { id: string }).id,
+    filters: { mutationKey: PLUGIN_CHANGING, status: 'pending' },
+    select: (mutation) => {
+      const variables = mutation.state.variables as { id: string; action?: PluginAction };
+      return { id: variables.id, action: variables.action ?? 'update' } as const;
+    },
   });
+
+export const usePluginPolicy = () => useQuery({ queryKey: keys.pluginPolicy, queryFn: api.plugins.policy });
+
+export function useSetPluginPolicy() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requireSigned, password }: { requireSigned: boolean; password: string }) => api.plugins.setPolicy(requireSigned, password),
+    // The answer does not say whether there is a release key: keep what the policy said before.
+    onSuccess: (policy) => client.setQueryData<PluginPolicy>(keys.pluginPolicy, (known) => ({ ...policy, releaseKey: policy.releaseKey ?? known?.releaseKey ?? null })),
+  });
+}
+
+/** How long before a page ticket ends it is replaced. */
+const TICKET_MARGIN_MS = 60_000;
+
+/**
+ * A ticket URL for a plugin's page. Never cached past the page: every visit asks for
+ * a fresh one, and a page kept open is given a new one shortly before it ends.
+ */
+export const usePluginTicket = (id: string) =>
+  useQuery({
+    queryKey: keys.pluginTicket(id),
+    queryFn: () => api.plugins.open(id),
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const secs = query.state.data?.expiresInSecs;
+      return secs ? Math.max(TICKET_MARGIN_MS, secs * 1000 - TICKET_MARGIN_MS) : false;
+    },
+  });
+
+/* ── software (the hub and the installer) ── */
+
+/** How often the hub update's outcome is asked for while it runs. */
+const HUB_UPDATE_POLL_MS = 3000;
+
+/**
+ * Versions and the last hub update. Read again every few seconds while a hub update
+ * runs, and, for `following` (the update this page started), until the hub is back
+ * and reports how it ended: it is away while it restarts.
+ */
+export const useSoftware = (following: number | null = null) =>
+  useQuery({
+    queryKey: keys.software,
+    queryFn: api.software.state,
+    retry: false,
+    refetchInterval: (query) => {
+      const job = query.state.data?.hubUpdate;
+      return job?.state === 'running' || (following !== null && job?.id !== following) ? HUB_UPDATE_POLL_MS : false;
+    },
+  });
+
+/** Starts a hub update. The hub restarts with it; the outcome comes from `useSoftware`. */
+export function useUpdateHub() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateHub(file, upload),
+    onSuccess: (job) =>
+      client.setQueryData<SoftwareState>(keys.software, (state) => (state ? { ...state, hubUpdate: job } : state)),
+  });
+}
+
+export function useUpdateInstaller() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateInstaller(file, upload),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.software });
+      void client.invalidateQueries({ queryKey: keys.softwareHistory });
+    },
+  });
+}
+
+/** What the installer did, newest first; `id` narrows it to one plugin, the hub or the installer. Admin only. */
+export const useSoftwareHistory = (id: string | null, enabled = true) =>
+  useQuery({ queryKey: [...keys.softwareHistory, id ?? ''], queryFn: () => api.software.history(id ? { id } : {}), enabled });
 
 /* ── live updates ── */
 

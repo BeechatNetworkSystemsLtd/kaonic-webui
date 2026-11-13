@@ -3,6 +3,7 @@ import type {
   NodeNetwork,
   Peer,
   Plugin,
+  SoftwareEvent,
   RadioBand,
   RadioCapability,
   ServiceStatus,
@@ -261,14 +262,34 @@ const SAMPLE_APP = `<!doctype html>
   </script>
 </body></html>`;
 
-function sampleAppUrl(): string | null {
+let sampleApp: string | null = null;
+
+/** The page every mock plugin serves; made once, as the browser keeps it until the tab closes. */
+export function sampleAppUrl(): string | null {
   if (typeof Blob === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
-  return URL.createObjectURL(new Blob([SAMPLE_APP], { type: 'text/html' }));
+  sampleApp ??= URL.createObjectURL(new Blob([SAMPLE_APP], { type: 'text/html' }));
+  return sampleApp;
 }
 
+const DAY = 24 * 60 * 60;
+
 export function seedPlugins(): Plugin[] {
+  const now = Math.floor(Date.now() / 1000);
+  const plugin = (fields: Pick<Plugin, 'id' | 'name' | 'version' | 'description' | 'developer' | 'official' | 'running' | 'permissions'> & Partial<Plugin>): Plugin => ({
+    enabled: fields.running,
+    removable: true,
+    hasIcon: false,
+    appUrl: null,
+    channel: 'stable',
+    url: null,
+    service: `kaonic-plugin-${fields.id}.service`,
+    installedTs: now - 12 * DAY,
+    highestVersion: fields.version,
+    previousVersion: null,
+    ...fields,
+  });
   return [
-    {
+    plugin({
       id: 'atak-bridge',
       name: 'ATAK Bridge',
       version: '0.3.0',
@@ -276,14 +297,10 @@ export function seedPlugins(): Plugin[] {
       developer: 'Beechat Network',
       official: true,
       running: true,
-      appUrl: sampleAppUrl(),
-      enabled: true,
-      hasIcon: false,
-      webview: null,
-      channel: 'stable',
-      adopted: false,
-    },
-    {
+      appUrl: '/apps/atak-bridge/',
+      permissions: ['mesh', 'network'],
+    }),
+    plugin({
       id: 'audio-ptt',
       name: 'Push to talk',
       version: '0.2.1',
@@ -291,44 +308,9 @@ export function seedPlugins(): Plugin[] {
       developer: 'Beechat Network',
       official: true,
       running: false,
-      appUrl: null,
-      enabled: false,
-      hasIcon: false,
-      webview: null,
-      channel: 'stable',
-      adopted: false,
-    },
-    {
-      id: 'mesh-chat',
-      name: 'Mesh chat',
-      version: '1.1.0',
-      description: 'Text rooms for everyone on the mesh, kept on each device so they work without internet.',
-      developer: 'Beechat Network',
-      official: true,
-      running: true,
-      appUrl: sampleAppUrl(),
-      enabled: true,
-      hasIcon: false,
-      webview: null,
-      channel: 'stable',
-      adopted: false,
-    },
-    {
-      id: 'position-beacon',
-      name: 'Position beacon',
-      version: '0.4.2',
-      description: 'Sends this device’s GPS position to whitelisted devices every minute.',
-      developer: 'Beechat Network',
-      official: true,
-      running: false,
-      appUrl: sampleAppUrl(),
-      enabled: false,
-      hasIcon: false,
-      webview: null,
-      channel: 'stable',
-      adopted: false,
-    },
-    {
+      permissions: ['audio', 'realtime', 'mesh'],
+    }),
+    plugin({
       id: 'field-sensors',
       name: 'Field sensors',
       version: '0.9.0',
@@ -336,12 +318,56 @@ export function seedPlugins(): Plugin[] {
       developer: 'Openfield Labs',
       official: false,
       running: false,
-      appUrl: null,
-      enabled: false,
-      hasIcon: false,
-      webview: null,
-      channel: 'stable',
-      adopted: false,
-    },
+      channel: 'experimental',
+      url: 'https://openfield.example/sensors',
+      permissions: ['network'],
+      installedTs: now - 2 * DAY,
+    }),
+    plugin({
+      id: 'mesh-chat',
+      name: 'Mesh chat',
+      version: '1.1.0',
+      description: 'Text rooms for everyone on the mesh, kept on each device so they work without internet.',
+      developer: 'Beechat Network',
+      official: true,
+      running: true,
+      appUrl: '/apps/mesh-chat/',
+      permissions: ['mesh'],
+      installedTs: now - DAY,
+      previousVersion: '1.0.4',
+    }),
+    plugin({
+      id: 'position-beacon',
+      name: 'Position beacon',
+      version: '0.4.2',
+      description: 'Sends this device’s GPS position to whitelisted devices every minute.',
+      developer: 'Beechat Network',
+      official: true,
+      running: false,
+      appUrl: '/apps/position-beacon/',
+      permissions: ['mesh'],
+    }),
+  ];
+}
+
+/** What the installer did before the mock started, newest first. */
+export function seedSoftwareHistory(): SoftwareEvent[] {
+  const now = Math.floor(Date.now() / 1000);
+  const event = (ago: number, fields: Pick<SoftwareEvent, 'id' | 'action' | 'outcome'> & Partial<SoftwareEvent>): SoftwareEvent => ({
+    time: now - ago,
+    from: null,
+    to: null,
+    signed: true,
+    actor: 'admin (192.168.10.20)',
+    message: '',
+    ...fields,
+  });
+  return [
+    event(DAY, { id: 'mesh-chat', action: 'upgrade', outcome: 'done', from: '1.0.4', to: '1.1.0' }),
+    event(DAY + 600, { id: 'mesh-chat', action: 'upgrade', outcome: 'rolled_back', from: '1.0.4', to: '1.0.5', message: 'mesh-chat 1.0.5 did not stay running; 1.0.4 is back' }),
+    event(2 * DAY, { id: 'field-sensors', action: 'install', outcome: 'done', to: '0.9.0', signed: false }),
+    event(3 * DAY, { id: 'audio-ptt', action: 'stop', outcome: 'done' }),
+    event(5 * DAY, { id: 'atak-bridge', action: 'start', outcome: 'failed', message: 'kaonic-plugin-atak-bridge.service did not start', actor: 'boot' }),
+    event(12 * DAY, { id: 'atak-bridge', action: 'install', outcome: 'done', to: '0.3.0' }),
   ];
 }

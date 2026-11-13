@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { errorMessage } from '@/api';
-import { useDevice, useFactoryReset, useMetrics, useReboot, useRestartService, useServices } from '@/data/queries';
+import { useAuthState, useDevice, useFactoryReset, useMetrics, useReboot, useRestartService, useServices, useSystemReport } from '@/data/queries';
 import { formatDuration, formatMegabytes } from '@/lib/format';
 import { Page, PanelGrid } from '@/shell/Page';
 import { Button, Field, Input, KeyValues, LoadError, Meter, Notice, Panel, Skeleton, Status } from '@/ui';
 import { BootPanel } from './BootPanel';
+import { SoftwarePanel } from './SoftwarePanel';
 import styles from './SystemPage.module.css';
 
 export default function SystemPage() {
+  const admin = useAuthState().data?.role === 'admin';
   return (
     <Page title="System" description="Device details, services and maintenance.">
       <PanelGrid min={340}>
@@ -15,7 +17,8 @@ export default function SystemPage() {
         <HealthPanel />
         <ServicesPanel />
       </PanelGrid>
-      <MaintenancePanel />
+      {admin ? <SoftwarePanel /> : null}
+      <MaintenancePanel admin={admin} />
       <BootPanel />
     </Page>
   );
@@ -96,7 +99,55 @@ function ServicesPanel() {
   );
 }
 
-function MaintenancePanel() {
+/** Copies text, with a fallback for browsers that refuse the clipboard API (plain HTTP). */
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  area.style.position = 'fixed';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  area.select();
+  const copied = document.execCommand('copy');
+  area.remove();
+  if (!copied) throw new Error('The browser did not allow copying.');
+}
+
+function SystemData() {
+  const report = useSystemReport();
+  const [copied, setCopied] = useState<'copied' | string | null>(null);
+  async function onCopy() {
+    setCopied(null);
+    try {
+      const text = await report.mutateAsync();
+      await copyText(text);
+      setCopied('copied');
+    } catch (error) {
+      setCopied(errorMessage(error));
+    }
+  }
+  return (
+    <>
+      <div className={styles.action}>
+        <div>
+          <p className={styles.serviceName}>System data</p>
+          <p className={styles.unit}>Versions of the hub, web UI, installer, plugins and OS, for a support request. No passwords or keys.</p>
+        </div>
+        <Button busy={report.isPending} onClick={() => void onCopy()}>
+          Copy system data
+        </Button>
+      </div>
+      {copied === 'copied' ? <Notice>Copied. Paste it into your message.</Notice> : null}
+      {copied && copied !== 'copied' ? <Notice tone="danger">{copied}</Notice> : null}
+    </>
+  );
+}
+
+function MaintenancePanel({ admin }: { admin: boolean }) {
   const reboot = useReboot();
   const reset = useFactoryReset();
   const [confirming, setConfirming] = useState(false);
@@ -110,6 +161,7 @@ function MaintenancePanel() {
   return (
     <Panel title="Maintenance">
       <div className={styles.maintenance}>
+        {admin ? <SystemData /> : null}
         <div className={styles.action}>
           <div>
             <p className={styles.serviceName}>Restart the device</p>

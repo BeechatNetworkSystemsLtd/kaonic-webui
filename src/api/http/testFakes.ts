@@ -13,6 +13,11 @@ export interface Call {
 type Reply = { status?: number; body?: unknown; text?: string };
 type Route = Reply | ((call: Call) => Reply);
 
+/** A form's fields, a file standing as its name. */
+function formFields(form: FormData): Record<string, string> {
+  return Object.fromEntries([...form.entries()].map(([name, value]) => [name, typeof value === 'string' ? value : `file:${value.name}`]));
+}
+
 /**
  * A hub that answers from a table of `"METHOD /path"` → reply. A route given a
  * list answers with each reply in turn and then repeats the last one. Every
@@ -30,7 +35,7 @@ export function fakeHub(routes: Record<string, Route | Route[]>) {
       method,
       path,
       headers: { ...(init.headers as Record<string, string>) },
-      body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined,
+      body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body instanceof FormData ? formFields(init.body) : undefined,
     };
     calls.push(call);
 

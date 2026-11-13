@@ -2,7 +2,7 @@ import type { PttSettings } from './types';
 
 /*
  * Push-to-talk settings: the kaonic-audio-ptt plugin's defaults, and the
- * ranges the hub accepts (docs/api/openapi.yaml `PttSettings`), so the page
+ * ranges the hub accepts (docs/api/hub-api.yaml `PttSettings`), so the page
  * can say what is wrong before saving and the mock refuses what the hub would.
  */
 

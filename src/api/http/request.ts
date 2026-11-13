@@ -22,6 +22,7 @@ const CODES: Record<string, ApiErrorCode> = {
   not_whitelisted: 'forbidden',
   not_found: 'not_found',
   conflict: 'conflict',
+  downgrade: 'conflict',
   busy: 'conflict',
   foreign_node: 'conflict',
   validation_failed: 'validation_failed',
@@ -68,8 +69,8 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 export interface Transport {
-  /** Sends a request and resolves with the parsed body, or undefined when there is none. */
-  request<T>(method: string, path: string, body?: unknown): Promise<T>;
+  /** Sends a request and resolves with the parsed body, or undefined when there is none. `timeoutMs` overrides the usual limit for a slow call. */
+  request<T>(method: string, path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<T>;
   /** A GET whose answer is a file, not JSON. */
   download(path: string): Promise<Blob>;
   /** The CSRF token of the current session, sent with every write. Null drops it. */
@@ -104,7 +105,7 @@ export function createTransport(options: TransportOptions = {}): Transport {
     setCsrfToken: (token) => void (csrf = token),
     csrfToken: () => csrf,
 
-    async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    async request<T>(method: string, path: string, body?: unknown, requestOptions: { timeoutMs?: number } = {}): Promise<T> {
       const headers: Record<string, string> = { Accept: 'application/json' };
       // A form (a file upload) sets its own multipart content type, boundary included.
       const isForm = body instanceof FormData;
@@ -123,7 +124,7 @@ export function createTransport(options: TransportOptions = {}): Transport {
           // Never let a cached answer stand in for the device's current state.
           cache: 'no-store',
           body: body === undefined ? undefined : isForm || isFile ? body : JSON.stringify(body),
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: AbortSignal.timeout(requestOptions.timeoutMs ?? timeoutMs),
         });
       } catch (error) {
         if (error instanceof DOMException && error.name === 'TimeoutError') {

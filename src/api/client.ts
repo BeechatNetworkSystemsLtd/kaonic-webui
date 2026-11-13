@@ -18,8 +18,15 @@ import type {
   NodeJob,
   NodeList,
   Peer,
+  HubUpdate,
+  InstallerUpdateResult,
+  PackageUpload,
   Plugin,
+  PluginAction,
   PluginInstallResult,
+  PluginPackageInfo,
+  PluginPolicy,
+  PluginTicket,
   PttDevices,
   PttKeyResult,
   PttSession,
@@ -36,7 +43,9 @@ import type {
   RemoteShellHandlers,
   ServiceStatus,
   SetupInput,
+  SoftwareEvent,
   SoftwareRelease,
+  SoftwareState,
   SourceId,
   SystemMetrics,
   VpnCapture,
@@ -122,6 +131,8 @@ export interface HubApi {
     factoryReset(password: string): Promise<void>;
   };
   system: {
+    /** Everything about this device's Kaonic software and OS, as plain text to paste into a support request. Admin only. */
+    report(): Promise<string>;
     metrics(): Promise<SystemMetrics>;
     services(): Promise<ServiceStatus[]>;
     restartService(unit: string): Promise<ServiceStatus>;
@@ -253,14 +264,39 @@ export interface HubApi {
      */
     openShell(id: string, password: string, size: { cols: number; rows: number }, handlers: RemoteShellHandlers): Promise<RemoteShell>;
   };
+  /**
+   * Plugins, installed and run by the plugin installer through the hub. `list` fails
+   * with `unavailable` (reason `installer_unavailable`) while the installer is not running.
+   */
   plugins: {
     list(): Promise<Plugin[]>;
-    setRunning(id: string, running: boolean): Promise<Plugin>;
-    /** Installs a plugin from its package (a ZIP), or updates it when it is already installed. Needs the password again: a plugin runs with full rights on the device. */
-    install(file: File, password: string): Promise<PluginInstallResult>;
-    restart(id: string): Promise<Plugin>;
-    /** Stops a plugin and erases it with its settings. */
-    remove(id: string): Promise<void>;
+    /** Start (and turn on at boot), stop (and turn off), restart, or go back to the version kept before the last upgrade. */
+    act(id: string, action: PluginAction): Promise<Plugin>;
+    /**
+     * Installs a plugin from its package, or upgrades it when it is already installed.
+     * A version older than one installed before is refused (`conflict`, reason `downgrade`) unless `allowDowngrade`.
+     */
+    install(file: File, upload: PackageUpload): Promise<PluginInstallResult>;
+    /** What a package is and asks for, without installing it (admin; no password). Rejects an invalid package as a `file` field error. */
+    check(file: File): Promise<PluginPackageInfo>;
+    /** Upgrades this plugin only: a package of another plugin is refused. */
+    update(id: string, file: File, upload: PackageUpload): Promise<Plugin>;
+    /** Stops and removes a plugin; its data goes too unless `keepData`. */
+    remove(id: string, keepData: boolean): Promise<void>;
+    /** A ticket URL for the plugin's page. `not_found` when it has none. */
+    open(id: string): Promise<PluginTicket>;
+    policy(): Promise<PluginPolicy>;
+    setPolicy(requireSigned: boolean, password: string): Promise<PluginPolicy>;
+  };
+  /** The hub's and the installer's own updates, and what the installer did. */
+  software: {
+    state(): Promise<SoftwareState>;
+    /** Starts a hub update and resolves once the package is checked; the hub then restarts. Read the outcome from `state().hubUpdate`. */
+    updateHub(file: File, upload: PackageUpload): Promise<HubUpdate>;
+    /** Updates the installer and waits for it (up to two minutes). Rejects with the reason if the old one had to come back. */
+    updateInstaller(file: File, upload: PackageUpload): Promise<InstallerUpdateResult>;
+    /** Newest first. `id` narrows it to one plugin, `kaonic-hub` or `kaonic-hub-installer`. */
+    history(filter?: { id?: string; limit?: number }): Promise<SoftwareEvent[]>;
   };
   events: {
     /** Starts delivery of a topic. Returns the function that stops it. */

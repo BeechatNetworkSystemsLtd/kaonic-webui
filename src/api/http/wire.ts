@@ -1,5 +1,5 @@
 /*
- * The hub's wire format: the schemas of `kaonic-hub/docs/api/openapi.yaml`
+ * The hub's wire format: the schemas of `kaonic-hub/docs/api/hub-api.yaml`
  * (v1) that the UI uses, as the hub sends them (snake_case). Nothing outside
  * `api/http/` sees these; `convert.ts` turns them into the UI's model.
  *
@@ -390,12 +390,73 @@ export interface WirePlugin {
   developer: string;
   official: boolean;
   running: boolean;
+  enabled: boolean;
+  removable: boolean;
+  has_icon: boolean;
   app_url: string | null;
-  enabled?: boolean;
-  has_icon?: boolean;
-  webview?: { port: number; tls: boolean } | null;
-  channel?: string | null;
-  adopted?: boolean;
+  channel: string | null;
+  url: string | null;
+  permissions: Array<'audio' | 'realtime' | 'mesh' | 'network' | 'root'>;
+  service: string;
+  installed_ts: number;
+  highest_version: string;
+  previous_version: string | null;
+}
+
+export interface WirePluginPolicy {
+  require_signed: boolean;
+  /** GET only. */
+  release_key?: boolean;
+}
+
+/** `POST /plugin-check`. */
+export interface WirePluginCheck {
+  id: string;
+  name: string;
+  version: string;
+  developer: string;
+  description?: string;
+  permissions: Array<'audio' | 'realtime' | 'mesh' | 'network' | 'root'>;
+  page: boolean;
+  signed: boolean;
+  installed?: string | null;
+}
+
+export interface WirePluginTicket {
+  url: string;
+  expires_in_secs: number;
+}
+
+/** installer-api.yaml `HubJob`. */
+export interface WireHubJob {
+  id: number;
+  version: string;
+  state: 'running' | 'done' | 'failed';
+  message: string;
+  started: number;
+  finished: number | null;
+}
+
+/** `GET /software`. */
+export interface WireSoftware {
+  hub: { version: string; from_update: boolean };
+  installer: { version: string | null; reachable: boolean };
+  core: unknown[] | null;
+  hub_update: WireHubJob | null;
+  release_key: boolean | null;
+}
+
+/** installer-api.yaml `Event`: optional fields are left out when empty. */
+export interface WireSoftwareEvent {
+  time: number;
+  id: string;
+  action: 'install' | 'upgrade' | 'downgrade' | 'rollback' | 'start' | 'stop' | 'restart' | 'remove';
+  outcome: 'done' | 'rolled_back' | 'failed';
+  from?: string;
+  to?: string;
+  signed?: boolean;
+  actor?: string;
+  message?: string;
 }
 
 export interface WireUpdates {

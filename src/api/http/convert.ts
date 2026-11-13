@@ -10,7 +10,11 @@ import type {
   NodeJob,
   NodeJobKind,
   Peer,
+  HubUpdate,
   Plugin,
+  PluginPolicy,
+  SoftwareEvent,
+  SoftwareState,
   PttBurst,
   PttDevices,
   PttSession,
@@ -52,7 +56,11 @@ import type {
   WireModulation,
   WireNetworkState,
   WirePeer,
+  WireHubJob,
   WirePlugin,
+  WirePluginPolicy,
+  WireSoftware,
+  WireSoftwareEvent,
   WirePttAudioMessage,
   WirePttDevices,
   WirePttSession,
@@ -529,11 +537,46 @@ export const toPlugin = (wire: WirePlugin): Plugin => ({
   official: wire.official,
   running: wire.running,
   appUrl: wire.app_url,
-  enabled: wire.enabled ?? wire.running,
-  hasIcon: wire.has_icon ?? false,
-  webview: wire.webview ?? null,
+  enabled: wire.enabled,
+  removable: wire.removable,
+  hasIcon: wire.has_icon,
   channel: wire.channel ?? null,
-  adopted: wire.adopted ?? false,
+  url: wire.url ?? null,
+  permissions: wire.permissions ?? [],
+  service: wire.service,
+  installedTs: wire.installed_ts,
+  highestVersion: wire.highest_version,
+  previousVersion: wire.previous_version ?? null,
+});
+
+export const toPluginPolicy = (wire: WirePluginPolicy): PluginPolicy => ({ requireSigned: wire.require_signed, releaseKey: wire.release_key ?? null });
+
+export const toHubUpdate = (wire: WireHubJob): HubUpdate => ({
+  id: wire.id,
+  version: wire.version,
+  state: wire.state,
+  message: wire.message,
+  started: wire.started,
+  finished: wire.finished ?? null,
+});
+
+export const toSoftware = (wire: WireSoftware): SoftwareState => ({
+  hub: { version: wire.hub.version, fromUpdate: wire.hub.from_update },
+  installer: { version: wire.installer.version ?? null, reachable: wire.installer.reachable },
+  hubUpdate: wire.hub_update ? toHubUpdate(wire.hub_update) : null,
+  releaseKey: wire.release_key ?? null,
+});
+
+export const toSoftwareEvent = (wire: WireSoftwareEvent): SoftwareEvent => ({
+  time: wire.time,
+  id: wire.id,
+  action: wire.action,
+  outcome: wire.outcome,
+  from: wire.from ?? null,
+  to: wire.to ?? null,
+  signed: wire.signed ?? false,
+  actor: wire.actor ?? null,
+  message: wire.message ?? '',
 });
 
 export const toTraffic = (wire: WireTrafficSample): TrafficSample => {

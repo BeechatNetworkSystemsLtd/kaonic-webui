@@ -2,7 +2,7 @@
  * The UI's own model of the hub.
  *
  * These types describe what the UI needs, in the UI's naming (camelCase). The
- * hub's contract is `kaonic-hub/docs/api/openapi.yaml`; `http/convert.ts` maps
+ * hub's contract is `kaonic-hub/docs/api/hub-api.yaml`; `http/convert.ts` maps
  * its wire format to these types, so a change in the API touches the transport
  * and nothing else.
  */
@@ -534,30 +534,124 @@ export interface MeshPacket {
 
 /* ── plugins ── */
 
+/** Extra rights a plugin was installed with, beyond its own folder and its page. */
+export type PluginPermission = 'audio' | 'realtime' | 'mesh' | 'network' | 'root';
+
 export interface Plugin {
   id: string;
   name: string;
   version: string;
   description: string;
   developer: string;
+  /** Signed by a Beechat release key, as the installer checked. */
   official: boolean;
   running: boolean;
-  /** Where the plugin's own web UI is served inside the hub (proxied); null if it has none. */
+  /** Its page inside the hub (`/apps/<id>/`); null if it has none. Open it through `plugins.open`. */
   appUrl: string | null;
   /** Started when the device starts (turned on). */
   enabled: boolean;
+  removable: boolean;
   hasIcon: boolean;
-  /** A page the plugin serves on its own port (gateway-era plugins), opened in a new tab. */
-  webview: { port: number; tls: boolean } | null;
   channel: string | null;
-  /** Moved over from the old gateway's installer. */
-  adopted: boolean;
+  /** The developer's page for it. */
+  url: string | null;
+  permissions: PluginPermission[];
+  /** Its systemd unit. */
+  service: string;
+  installedTs: number;
+  /** The highest version ever installed; a lower one needs `allowDowngrade`. */
+  highestVersion: string;
+  /** The version a rollback goes back to; null if there is none. */
+  previousVersion: string | null;
 }
+
+export type PluginAction = 'start' | 'stop' | 'restart' | 'rollback';
 
 /** What installing a package did: a new plugin, or a newer version of one already installed. */
 export interface PluginInstallResult {
   action: 'installed' | 'updated';
   plugin: Plugin;
+}
+
+/** A package upload: the password again, and whether a version older than one installed before may go in. */
+export interface PackageUpload {
+  password: string;
+  allowDowngrade?: boolean;
+}
+
+/** What the installer accepts. */
+export interface PluginPolicy {
+  requireSigned: boolean;
+  /** False on a development device: no release key, so packages install unsigned and signed-only cannot be turned on. Null when not known. */
+  releaseKey: boolean | null;
+}
+
+/** What a package is and asks for, as the installer read it, before it is installed. */
+export interface PluginPackageInfo {
+  id: string;
+  name: string;
+  version: string;
+  developer: string;
+  description: string;
+  permissions: PluginPermission[];
+  /** It has a web page. */
+  hasPage: boolean;
+  signed: boolean;
+  /** The version installed now, if any. */
+  installed: string | null;
+}
+
+/** A ticket URL for a plugin's page, good for a limited time. */
+export interface PluginTicket {
+  url: string;
+  expiresInSecs: number;
+}
+
+/* ── software (the hub, the installer, and their history) ── */
+
+export type SoftwareAction = 'install' | 'upgrade' | 'downgrade' | 'rollback' | 'start' | 'stop' | 'restart' | 'remove';
+export type SoftwareOutcome = 'done' | 'rolled_back' | 'failed';
+
+/** One entry in the installer's history: a plugin, the hub (`kaonic-hub`) or the installer (`kaonic-hub-installer`). */
+export interface SoftwareEvent {
+  /** Unix seconds. */
+  time: number;
+  id: string;
+  action: SoftwareAction;
+  outcome: SoftwareOutcome;
+  from: string | null;
+  to: string | null;
+  signed: boolean;
+  /** Who asked, e.g. "admin (192.168.10.20)", or "boot". */
+  actor: string | null;
+  message: string;
+}
+
+/** The last update of the hub, run by the installer. */
+export interface HubUpdate {
+  id: number;
+  version: string;
+  state: 'running' | 'done' | 'failed';
+  message: string;
+  /** Unix seconds. */
+  started: number;
+  finished: number | null;
+}
+
+export interface SoftwareState {
+  hub: {
+    version: string;
+    /** Runs the updated copy, not the one in the system image. */
+    fromUpdate: boolean;
+  };
+  installer: { version: string | null; reachable: boolean };
+  hubUpdate: HubUpdate | null;
+  /** False on a development device: updates and plugins install unsigned. Null when the installer cannot say. */
+  releaseKey: boolean | null;
+}
+
+export interface InstallerUpdateResult {
+  version: string;
 }
 
 /* ── live data ── */
