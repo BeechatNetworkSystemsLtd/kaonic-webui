@@ -379,6 +379,7 @@ export interface WireRemoteDevice {
   bands: WireRadioBand[];
   metrics?: WireSystemMetrics | null;
   ptt?: WirePttSettings | null;
+  sharing?: { uplink: WireVpnUplink; gateway: WireVpnGateway; internet: boolean } | null;
 }
 
 export type WireRemoteJobsInput =
@@ -448,6 +449,7 @@ export interface WireSoftware {
   hub: { version: string; from_update: boolean };
   installer: { version: string | null; reachable: boolean };
   core: unknown[] | null;
+  programs?: Array<{ id: string; name?: string; description?: string; running: boolean; version: string | null; from_update: boolean }>;
   hub_update: WireHubJob | null;
   release_key: boolean | null;
 }

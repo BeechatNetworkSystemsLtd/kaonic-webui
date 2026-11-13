@@ -226,6 +226,35 @@ describe('mock hub', () => {
     }
   });
 
+  it('shares one node\'s internet with others, and refuses a node that would be gateway and user at once', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = fresh();
+      await api.auth.setup(adminSetup);
+      const trusted = (await api.peers.list()).filter((peer) => peer.list === 'whitelist' && peer.online);
+      const [source, user] = [trusted[0]!, trusted[1]!];
+      const off = (await api.nodes.details(user.id)).sharing!;
+      expect(off.uplink.enabled).toBe(false);
+
+      const gatewayOn = api.nodes.setGateway(source.id, { enabled: true, egressInterface: null, routes: ['0.0.0.0/0'] });
+      await vi.runAllTimersAsync();
+      expect(await gatewayOn).toMatchObject({ enabled: true });
+      const uplinkOn = api.nodes.setUplink(user.id, { enabled: true, peerId: source.id, defaultRoute: true, routes: [] });
+      await vi.runAllTimersAsync();
+      expect(await uplinkOn).toMatchObject({ enabled: true, peerId: source.id, active: true });
+      const details = api.nodes.details(user.id);
+      await vi.runAllTimersAsync();
+      expect((await details).sharing!.uplink.enabled).toBe(true);
+
+      const both = api.nodes.setUplink(source.id, { enabled: true, peerId: user.id, defaultRoute: true, routes: [] });
+      const refused = expect(both).rejects.toMatchObject({ code: 'validation_failed' });
+      await vi.runAllTimersAsync();
+      await refused;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails a job on a node that is out of range instead of leaving it hanging', async () => {
     vi.useFakeTimers();
     try {

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
+import type { CoreProgram } from '@/api';
 import { useSoftware } from '@/data/queries';
 import { Panel, Status } from '@/ui';
 import { PluginGlyph } from './PluginGlyph';
 import styles from './PluginsPage.module.css';
 
-/** The icon the hub serves for the hub or the installer; the id's pattern if it can't. */
-export function CoreIcon({ id, lit, size = 40 }: { id: 'kaonic-hub' | 'kaonic-hub-installer'; lit: boolean; size?: number }) {
+/** The icon the hub serves for a core program; the id's pattern if it can't. */
+export function CoreIcon({ id, lit, size = 40 }: { id: string; lit: boolean; size?: number }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <PluginGlyph id={id} lit={lit} />;
   return (
@@ -22,11 +23,42 @@ export function CoreIcon({ id, lit, size = 40 }: { id: 'kaonic-hub' | 'kaonic-hu
   );
 }
 
-/** The hub and the installer, above the plugins: they run every plugin and update each other. */
+/** A core program the hub updates (commd, the factory server), as its own manifest names it. */
+function ProgramRow({ program, admin }: { program: CoreProgram; admin: boolean }) {
+  return (
+    <li className={styles.plugin} data-running={program.running}>
+      <CoreIcon id={program.id} lit={program.running} />
+      <div className={styles.text}>
+        <h2 className={styles.name}>{program.name}</h2>
+        <p className={styles.byline}>
+          {program.version ? (
+            <>
+              Version <span className="num">{program.version}</span>
+              {program.fromUpdate ? ', updated copy' : ', from the system image'}
+            </>
+          ) : (
+            program.description
+          )}
+          {admin ? (
+            <>
+              {' · '}
+              <Link className={styles.link} to="/system">
+                Update on the System page
+              </Link>
+            </>
+          ) : null}
+        </p>
+      </div>
+      {program.running ? <Status tone="ok">Running</Status> : <Status tone="danger">Not running</Status>}
+    </li>
+  );
+}
+
+/** The core programs, above the plugins: the hub and the installer run every plugin and update each other; the hub also updates commd and the factory server. */
 export function CoreSoftware({ admin }: { admin: boolean }) {
   const software = useSoftware();
   if (!software.data) return null;
-  const { hub, installer } = software.data;
+  const { hub, installer, programs } = software.data;
   return (
     <Panel flush>
       <ul className={styles.list} aria-label="System software">
@@ -65,6 +97,9 @@ export function CoreSoftware({ admin }: { admin: boolean }) {
           </div>
           {installer.reachable ? <Status tone="ok">Running</Status> : <Status tone="danger">Not running</Status>}
         </li>
+        {programs.map((program) => (
+          <ProgramRow key={program.id} program={program} admin={admin} />
+        ))}
       </ul>
     </Panel>
   );

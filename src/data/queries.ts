@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
-import { useMutation, useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   api,
+  type CoreProgramId,
   type BootMode,
   type BootSlotId,
   type ConsumerId,
@@ -380,6 +381,10 @@ export function useSetNodeList() {
 export const useNodeDetails = (id: string, enabled: boolean) =>
   useQuery({ queryKey: keys.node(id), queryFn: () => api.nodes.details(id), enabled, retry: false, staleTime: 60_000 });
 
+/** What several nodes say about themselves, asked at once (each over the mesh, without retries). */
+export const useNodesDetails = (ids: string[], enabled: boolean) =>
+  useQueries({ queries: ids.map((id) => ({ queryKey: keys.node(id), queryFn: () => api.nodes.details(id), enabled, retry: false, staleTime: 60_000 })) });
+
 export const useSoftwareRelease = () => useQuery({ queryKey: keys.release, queryFn: api.nodes.release, staleTime: Infinity });
 export const useNodeJobs = () => useQuery({ queryKey: keys.jobs, queryFn: api.nodes.jobs, ...live });
 
@@ -543,6 +548,18 @@ export function useUpdateInstaller() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateInstaller(file, upload),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: keys.software });
+      void client.invalidateQueries({ queryKey: keys.softwareHistory });
+    },
+  });
+}
+
+/** Updates commd or the factory server; resolves once it runs the update (or the old one is back). */
+export function useUpdateProgram(id: CoreProgramId) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateProgram(id, file, upload),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.software });
       void client.invalidateQueries({ queryKey: keys.softwareHistory });

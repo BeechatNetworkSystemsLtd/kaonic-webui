@@ -1,5 +1,6 @@
 import { ApiError } from '../errors';
 import type {
+  CoreProgramId,
   HubUpdate,
   InstallerUpdateResult,
   PackageUpload,
@@ -108,6 +109,10 @@ export function createMockPlugins(options: MockPluginsOptions) {
 
   let hub = { version: '1.0.0-dev', highest: '1.0.0-dev', fromUpdate: false };
   let installer = { version: '1.0.0', highest: '1.0.0' };
+  const programs: Record<CoreProgramId, { name: string; description: string; version: string; highest: string; fromUpdate: boolean }> = {
+    'kaonic-commd': { name: 'Kaonic Radio Control', description: 'Drives the radio modules', version: '0.2.17', highest: '0.2.17', fromUpdate: false },
+    'kaonic-factory': { name: 'Kaonic Factory Server', description: 'Self-test server for factory checks', version: '0.1.0', highest: '0.1.0', fromUpdate: false },
+  };
   let hubUpdate: (HubUpdate & { doneAt: number; failing: boolean; from: string; signed: boolean }) | null = null;
   let jobIds = 0;
 
@@ -310,6 +315,7 @@ export function createMockPlugins(options: MockPluginsOptions) {
       return {
         hub: { version: hub.version, fromUpdate: hub.fromUpdate },
         installer: { version: installerRunning ? installer.version : null, reachable: installerRunning },
+        programs: Object.entries(programs).map(([id, program]) => ({ id, name: program.name, description: program.description, running: true, version: program.version, fromUpdate: program.fromUpdate })),
         hubUpdate: hubUpdate ? jobView(hubUpdate) : null,
         releaseKey: installerRunning ? releaseKey : null,
       };
@@ -350,6 +356,23 @@ export function createMockPlugins(options: MockPluginsOptions) {
       }
       installer = { version: checked.version, highest: compareVersions(checked.version, installer.highest) > 0 ? checked.version : installer.highest };
       record(INSTALLER, action, 'done', { from, to: checked.version, signed: checked.signed });
+      return { version: checked.version };
+    },
+
+    updateProgram(id: CoreProgramId, file: File, upload: PackageUpload): InstallerUpdateResult {
+      const program = programs[id];
+      if (!program) throw new ApiError('not_found', 'Only kaonic-commd and kaonic-factory are updated here.');
+      expectId(file, id, `a ${id} package`);
+      const checked = checkPackage(file, upload, program.highest);
+      const from = program.version;
+      const action: SoftwareAction = compareVersions(checked.version, from) < 0 ? 'downgrade' : 'upgrade';
+      if (checked.failing) {
+        const message = `${id} ${checked.version} did not stay up; ${from} is back`;
+        record(id, action, 'rolled_back', { from, to: checked.version, signed: checked.signed, message });
+        throw new ApiError('internal', message, {}, 'update_failed');
+      }
+      programs[id] = { ...program, version: checked.version, highest: compareVersions(checked.version, program.highest) > 0 ? checked.version : program.highest, fromUpdate: true };
+      record(id, action, 'done', { from, to: checked.version, signed: checked.signed });
       return { version: checked.version };
     },
 

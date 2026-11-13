@@ -39,7 +39,7 @@ const TRAIL_STEP_MS = 28;
 
 const LANE: Record<BallKind, number> = { sent: 1, received: -1, passing: 0 };
 
-export const ballRadius = (bytes: number) => 2 + Math.min(1, bytes / 1000) * 2.2;
+export const ballRadius = (bytes: number) => 1.2 + Math.min(1, bytes / 1000) * 1.3;
 
 /** Bigger packets are on the air longer. Slowed down from real airtime so the eye can follow. */
 export const hopTime = (bytes: number) => 450 + Math.min(1, bytes / 1000) * 550;
@@ -126,7 +126,7 @@ export function mergeBalls(balls: readonly Ball[], now: number, positions: Reado
 /** Size, in pixels, of the pre-drawn glow image. It is scaled to each ball when drawn. */
 const SPRITE = 64;
 /** How many times wider than the ball its glow reaches. */
-const GLOW_REACH = 3;
+const GLOW_REACH = 2.5;
 
 /**
  * A soft glowing dot, drawn once per colour and then stamped for every ball.

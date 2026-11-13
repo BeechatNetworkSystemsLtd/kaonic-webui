@@ -515,6 +515,7 @@ export const toNodeDetails = (wire: WireRemoteDevice): NodeDetails => ({
   bands: wire.bands.map(toBand),
   metrics: wire.metrics ? toMetrics(wire.metrics) : null,
   ptt: wire.ptt ? toPttSettings(wire.ptt) : null,
+  sharing: wire.sharing ? { uplink: toVpnUplink(wire.sharing.uplink), gateway: toVpnGateway(wire.sharing.gateway), internet: wire.sharing.internet } : null,
 });
 
 const NODE_JOB_KINDS: Record<string, NodeJobKind> = { node_update: 'update', node_radio: 'radio', node_restart: 'restart', node_ptt: 'ptt' };
@@ -570,6 +571,14 @@ export const toHubUpdate = (wire: WireHubJob): HubUpdate => ({
 export const toSoftware = (wire: WireSoftware): SoftwareState => ({
   hub: { version: wire.hub.version, fromUpdate: wire.hub.from_update },
   installer: { version: wire.installer.version ?? null, reachable: wire.installer.reachable },
+  programs: (wire.programs ?? []).map((program) => ({
+    id: program.id,
+    name: program.name || program.id,
+    description: program.description ?? '',
+    running: program.running,
+    version: program.version ?? null,
+    fromUpdate: program.from_update,
+  })),
   hubUpdate: wire.hub_update ? toHubUpdate(wire.hub_update) : null,
   releaseKey: wire.release_key ?? null,
 });

@@ -509,6 +509,8 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
       async setCodename(id, codename) {
         await write<unknown>('PUT', path`/peers/${id}/remote/codename`, { codename });
       },
+      setUplink: async (id, input) => toVpnUplink(await write<WireVpnUplink>('PUT', path`/peers/${id}/remote/vpn/uplink`, fromVpnUplink(input))),
+      setGateway: async (id, input) => toVpnGateway(await write<WireVpnGateway>('PUT', path`/peers/${id}/remote/vpn/gateway`, fromVpnGateway(input))),
       async openShell(id, password, size, handlers) {
         // The password buys a one-time ticket; the socket carries it, as it cannot carry the CSRF header.
         const { ticket } = await write<{ ticket: string }>('POST', path`/peers/${id}/remote/shell/ticket`, { password });
@@ -559,6 +561,11 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
       async updateInstaller(file, upload) {
         // The hub answers once the new installer is up, or the old one is back: up to two minutes.
         const record = await write<{ version?: string }>('POST', '/software/installer', packageForm(file, upload), { timeoutMs: INSTALLER_UPDATE_MS });
+        return { version: record.version ?? '' };
+      },
+      async updateProgram(id, file, upload) {
+        // The hub answers once the program runs the update, or the old one is back: up to two minutes.
+        const record = await write<{ version?: string }>('POST', path`/software/core/${id}`, packageForm(file, upload), { timeoutMs: INSTALLER_UPDATE_MS });
         return { version: record.version ?? '' };
       },
       async history(filter = {}) {

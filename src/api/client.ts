@@ -1,4 +1,5 @@
 import type {
+  CoreProgramId,
   AuthState,
   BandId,
   BootImage,
@@ -261,6 +262,10 @@ export interface HubApi {
     setPtt(ids: string[], settings: RemotePttSettings): Promise<NodeJob[]>;
     /** Renames one node; answers with its details as they are now. */
     setCodename(id: string, codename: string): Promise<void>;
+    /** Makes one node take internet from a gateway node, or stop. */
+    setUplink(id: string, input: VpnUplinkInput): Promise<VpnUplink>;
+    /** Makes one node share its internet with the mesh, or stop. */
+    setGateway(id: string, input: VpnGatewayInput): Promise<VpnGateway>;
     /**
      * Opens a shell on the node, after the admin's password again. Resolves once the
      * socket is open; `onOpen` follows when the node has started the shell.
@@ -298,6 +303,8 @@ export interface HubApi {
     updateHub(file: File, upload: PackageUpload): Promise<HubUpdate>;
     /** Updates the installer and waits for it (up to two minutes). Rejects with the reason if the old one had to come back. */
     updateInstaller(file: File, upload: PackageUpload): Promise<InstallerUpdateResult>;
+    /** Updates commd or the factory server and waits until it runs the update (up to two minutes). Rejects with the reason if the old one had to come back. */
+    updateProgram(id: CoreProgramId, file: File, upload: PackageUpload): Promise<InstallerUpdateResult>;
     /** Newest first. `id` narrows it to one plugin, `kaonic-hub` or `kaonic-hub-installer`. */
     history(filter?: { id?: string; limit?: number }): Promise<SoftwareEvent[]>;
   };

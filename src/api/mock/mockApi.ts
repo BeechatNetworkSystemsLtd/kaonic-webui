@@ -3,6 +3,7 @@ import { createMockCapture } from './mockVpnCapture';
 import type { ConnectionState, HubApi } from '../client';
 import { ApiError } from '../errors';
 import type {
+  CoreProgramId,
   BootMode,
   BootSlotId,
   ConsumerId,
@@ -17,6 +18,9 @@ import type {
   NetworkSource,
   NetworkState,
   NodeDetails,
+  NodeSharing,
+  VpnGateway,
+  VpnUplink,
   NodeJob,
   NodeList,
   Peer,
@@ -279,6 +283,22 @@ export function createMockApi(options: MockOptions = {}): HubApi {
   const RUNNING_TEXT: Record<NodeJob['kind'], string> = { update: 'Sending the update', radio: 'Applying radio settings', restart: 'Restarting', ptt: 'Applying talk settings' };
   const DONE_TEXT: Record<NodeJob['kind'], string> = { update: 'Updated', radio: 'Radio settings applied', restart: 'Restarted', ptt: 'Talk settings applied' };
   /** Each managed node's talk settings, as the mock's nodes keep them. */
+  /** Each managed node's internet sharing, as the admin set it. The first node seeded has internet of its own. */
+  const nodeSharing = new Map<string, { uplink: VpnUplinkInput; gateway: VpnGatewayInput }>();
+  const sharingOf = (id: string) => {
+    if (!nodeSharing.has(id)) nodeSharing.set(id, { uplink: { enabled: false, peerId: null, defaultRoute: true, routes: [] }, gateway: { enabled: false, egressInterface: null, routes: ['0.0.0.0/0'] } });
+    return nodeSharing.get(id)!;
+  };
+  const nodeSharingView = (id: string): NodeSharing => {
+    const { uplink, gateway } = sharingOf(id);
+    const internet = peers.find((peer) => peer.list === 'whitelist')?.id === id;
+    const through = uplink.peerId === null ? undefined : peers.find((peer) => peer.id === uplink.peerId);
+    return {
+      uplink: { ...uplink, routes: [...uplink.routes], active: uplink.enabled, detail: uplink.enabled ? `Through ${through?.codename ?? 'this device'}.` : null, gateways: [] },
+      gateway: { ...gateway, routes: [...gateway.routes], active: gateway.enabled && internet, availableInterfaces: ['wlan0'], detail: gateway.enabled ? (internet ? 'Forwarding for the mesh through wlan0.' : 'No uplink to share.') : null },
+      internet,
+    };
+  };
   const nodePtt = new Map<string, PttSettings>();
   const pttOf = (id: string) => {
     if (!nodePtt.has(id)) nodePtt.set(id, { ...DEFAULT_PTT_SETTINGS });
@@ -1446,6 +1466,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
           bands: bandsOf(id),
           metrics: { cpuPercent: 12 + (peer.codename.charCodeAt(3) % 30), ramUsedMb: 150, ramTotalMb: 427, fsFreeMb: 2310, fsTotalMb: 3520, uptimeSecs, battery },
           ptt: { ...pttOf(id) },
+          sharing: nodeSharingView(id),
         };
       }),
       release: authed(() => RELEASE),
@@ -1469,6 +1490,22 @@ export function createMockApi(options: MockOptions = {}): HubApi {
         if (!peer.online) throw new ApiError('unavailable', `${peer.codename} is out of range.`);
         peer.codename = codename;
         emit('peers', peers);
+      }),
+      setUplink: authed((id: string, input: VpnUplinkInput): VpnUplink => {
+        const peer = managed(id);
+        if (!peer.online) throw new ApiError('unavailable', `${peer.codename} is out of range.`);
+        failIf(checkUplink(input));
+        if (input.enabled && sharingOf(id).gateway.enabled) failIf({ enabled: "This node is a gateway: it cannot use another one's uplink at the same time." });
+        sharingOf(id).uplink = { ...input, routes: [...input.routes] };
+        return nodeSharingView(id).uplink;
+      }),
+      setGateway: authed((id: string, input: VpnGatewayInput): VpnGateway => {
+        const peer = managed(id);
+        if (!peer.online) throw new ApiError('unavailable', `${peer.codename} is out of range.`);
+        failIf(checkGateway(input));
+        if (input.enabled && sharingOf(id).uplink.enabled) failIf({ enabled: "This node uses another node's uplink: turn that off first." });
+        sharingOf(id).gateway = { ...input, routes: [...input.routes] };
+        return nodeSharingView(id).gateway;
       }),
       async openShell(id, password, _size, handlers) {
         await wait();
@@ -1496,6 +1533,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       state: authed(() => installer.software.state()),
       updateHub: slow((file: File, upload: PackageUpload) => installer.software.updateHub(file, upload)),
       updateInstaller: slow((file: File, upload: PackageUpload) => installer.software.updateInstaller(file, upload)),
+      updateProgram: slow((id: CoreProgramId, file: File, upload: PackageUpload) => installer.software.updateProgram(id, file, upload)),
       history: authed((filter?: { id?: string; limit?: number }) => installer.software.history(filter)),
     },
 

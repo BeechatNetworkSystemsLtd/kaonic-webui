@@ -488,6 +488,16 @@ export interface NodeDetails {
   metrics: SystemMetrics | null;
   /** Its talk settings; null where talk does not run. */
   ptt: PttSettings | null;
+  /** Its part in internet sharing; null from a node too old to tell. */
+  sharing: NodeSharing | null;
+}
+
+/** A node's part in internet sharing: using a gateway, being one, and whether it has internet of its own. */
+export interface NodeSharing {
+  uplink: VpnUplink;
+  gateway: VpnGateway;
+  /** It has internet of its own (not through the mesh). */
+  internet: boolean;
 }
 
 /** An admin's shell on another node, over the mesh. Output arrives through `RemoteShellHandlers`. */
@@ -667,6 +677,8 @@ export interface SoftwareState {
     fromUpdate: boolean;
   };
   installer: { version: string | null; reachable: boolean };
+  /** commd and the factory server, updated by the hub. Empty from a hub too old to tell. */
+  programs: CoreProgram[];
   hubUpdate: HubUpdate | null;
   /** False on a development device: updates and plugins install unsigned. Null when the installer cannot say. */
   releaseKey: boolean | null;
@@ -674,6 +686,21 @@ export interface SoftwareState {
 
 export interface InstallerUpdateResult {
   version: string;
+}
+
+/** A core program's id, e.g. `kaonic-commd`. */
+export type CoreProgramId = string;
+
+/** A core program the hub updates besides the installer (commd, the factory server): named by its own manifest. */
+export interface CoreProgram {
+  id: CoreProgramId;
+  name: string;
+  description: string;
+  running: boolean;
+  /** Null when the image's copy does not say. */
+  version: string | null;
+  /** Runs the updated copy, not the one in the system image. */
+  fromUpdate: boolean;
 }
 
 /* ── live data ── */

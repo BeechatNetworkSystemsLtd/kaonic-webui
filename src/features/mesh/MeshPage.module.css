@@ -125,3 +125,7 @@
     top: var(--s4);
   }
 }
+.sharing {
+  margin-top: var(--s2);
+  pointer-events: auto;
+}

@@ -8,6 +8,7 @@ import { useDevice, useNetwork, usePeers, useSetNodeList } from '@/data/queries'
 import { LINK_TEXT, LIST_TEXT, NETWORK_TEXT } from '@/features/nodes/labels';
 import { formatAgo, shortHash } from '@/lib/format';
 import { Button, KeyValues, LoadError, Notice, Skeleton, Status } from '@/ui';
+import { InternetSharingDialog } from './InternetSharing';
 import { MeshGraph, MeshLegend } from './MeshGraph';
 import { SELF } from './meshLayout';
 import styles from './MeshPage.module.css';
@@ -27,6 +28,7 @@ export default function MeshPage() {
   const device = useDevice();
   const move = useSetNodeList();
   const [selected, setSelected] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const act: Act = (id, list) => move.mutate({ id, list });
 
   useEffect(() => {
@@ -74,6 +76,11 @@ export default function MeshPage() {
         <p className={`${styles.count} num`}>
           {inRange === 1 ? '1 device in range' : `${inRange} devices in range`}, {whitelisted} whitelisted
         </p>
+        {device.data?.isAdmin ? (
+          <Button size="small" className={styles.sharing} onClick={() => setSharing(true)}>
+            Internet sharing
+          </Button>
+        ) : null}
         {waiting.map((peer) => (
           <button key={peer.id} type="button" className={styles.asking} onClick={() => setSelected(peer.id)}>
             <span className="mono">{shortHash(peer.id)}</span> waits to join
@@ -83,6 +90,7 @@ export default function MeshPage() {
       <div className={styles.legend}>
         <MeshLegend />
       </div>
+      {sharing ? <InternetSharingDialog onClose={() => setSharing(false)} /> : null}
     </div>
   );
 }
@@ -152,11 +160,11 @@ function PeerDetails({ peer, peers, busy, error, act, onClose }: PeerDetailsProp
 /**
  * What can be done from the popup. Whitelisting a device that waits to join
  * sets it up (provisions it), which needs it in range; a device that belongs
- * to another admin cannot be whitelisted at all.
+ * to another admin cannot be whitelisted at all. Removing a node is left to
+ * its node page and the node table, away from a click on the map.
  */
 function PeerActions({ peer, busy, act }: { peer: Peer; busy: boolean; act: Act }) {
-  if (peer.trust.isAdmin) return null;
-  if (peer.list === 'whitelist') return <Button size="small" variant="danger" busy={busy} onClick={() => act(peer.id, 'none')}>Remove from whitelist</Button>;
+  if (peer.trust.isAdmin || peer.list === 'whitelist') return null;
   if (peer.list === 'blacklist') return <Button size="small" busy={busy} onClick={() => act(peer.id, 'none')}>Take off the blacklist</Button>;
   const provisioning = peer.trust.provisioning?.state === 'running';
   const needsSetup = peer.trust.network !== 'ours';

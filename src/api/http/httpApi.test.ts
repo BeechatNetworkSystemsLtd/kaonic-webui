@@ -572,6 +572,18 @@ describe('remote management', () => {
     expect(calls.at(-1)!.body).toEqual({ codename: 'abcd1234' });
   });
 
+  it('turns a node\'s uplink and gateway on over the mesh', async () => {
+    const { api, calls } = makeApi({
+      'GET /auth/state': { body: AUTH },
+      'PUT /peers/dd/remote/vpn/uplink': { body: { enabled: true, active: true, peer_id: 'aa', routes: ['0.0.0.0/0'], default_route: true, detail: 'Through aa.', gateways: [] } },
+      'PUT /peers/ee/remote/vpn/gateway': { body: { enabled: true, active: true, egress_interface: 'wlan0', routes: ['0.0.0.0/0'], available_interfaces: ['wlan0'], detail: null } },
+    });
+    expect(await api.nodes.setUplink('dd', { enabled: true, peerId: 'aa', defaultRoute: true, routes: [] })).toMatchObject({ enabled: true, active: true, peerId: 'aa' });
+    expect(calls.at(-1)!.body).toEqual({ enabled: true, peer_id: 'aa', default_route: true, routes: [] });
+    expect(await api.nodes.setGateway('ee', { enabled: true, egressInterface: null, routes: ['0.0.0.0/0'] })).toMatchObject({ enabled: true, egressInterface: 'wlan0' });
+    expect(calls.at(-1)!.body).toEqual({ enabled: true, egress_interface: null, routes: ['0.0.0.0/0'] });
+  });
+
   it('opens a shell with a ticket bought with the password', async () => {
     const hub = fakeHub({ 'GET /auth/state': { body: AUTH }, 'POST /peers/dd/remote/shell/ticket': { body: { ticket: 'abc', expires_in_secs: 30 } } });
     const urls: string[] = [];
@@ -685,6 +697,7 @@ describe('plugins and software', () => {
           hub: { version: '1.4.0', from_update: true },
           installer: { version: '1.0.2', reachable: true },
           core: [],
+          programs: [{ id: 'kaonic-commd', name: 'Kaonic Radio Control', description: 'Drives the radios', running: true, version: '0.2.18', from_update: true }],
           hub_update: { id: 2, version: '1.5.0', state: 'failed', message: '1.5.0 did not come up; 1.4.0 is back', started: 10, finished: 140 },
           release_key: false,
         },
@@ -699,6 +712,7 @@ describe('plugins and software', () => {
     expect(await api.software.state()).toEqual({
       hub: { version: '1.4.0', fromUpdate: true },
       installer: { version: '1.0.2', reachable: true },
+      programs: [{ id: 'kaonic-commd', name: 'Kaonic Radio Control', description: 'Drives the radios', running: true, version: '0.2.18', fromUpdate: true }],
       hubUpdate: { id: 2, version: '1.5.0', state: 'failed', message: '1.5.0 did not come up; 1.4.0 is back', started: 10, finished: 140 },
       releaseKey: false,
     });

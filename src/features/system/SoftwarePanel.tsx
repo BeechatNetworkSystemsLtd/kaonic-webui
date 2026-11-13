@@ -1,13 +1,14 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { validationFields, type HubUpdate, type PackageUpload } from '@/api';
-import { useSoftware, useUpdateHub, useUpdateInstaller } from '@/data/queries';
+import { useSoftware, useUpdateHub, useUpdateInstaller, useUpdateProgram } from '@/data/queries';
+import type { CoreProgram } from '@/api';
 import { CoreIcon } from '@/features/plugins/CoreSoftware';
 import { isDowngradeRefusal, formatWhen } from '@/features/plugins/software';
 import { formatBytes } from '@/lib/format';
 import { Button, Field, FormError, Input, KeyValues, LoadError, Notice, Panel, Skeleton, Status, Switch } from '@/ui';
 import styles from './SystemPage.module.css';
 
-/** The hub and the plugin installer: their versions, and updating each (admin only). */
+/** The core programs: their versions, and updating each (admin only). */
 export function SoftwarePanel() {
   /** The hub update started from this page, followed until it ends. */
   const [following, setFollowing] = useState<number | null>(null);
@@ -36,6 +37,14 @@ export function SoftwarePanel() {
                   {software.data.installer.reachable ? software.data.installer.version ?? '–' : <Status tone="danger">Not running</Status>}
                 </>,
               ],
+              ...software.data.programs.map((program): [string, ReactNode] => [
+                program.name,
+                <>
+                  <CoreIcon id={program.id} lit={program.running} size={20} />{' '}
+                  {program.running ? (program.version ?? '–') : <Status tone="danger">Not running</Status>}{' '}
+                  {program.version ? <span className={styles.unit}>{program.fromUpdate ? '(updated copy)' : '(from the system image)'}</span> : null}
+                </>,
+              ]),
             ]}
           />
           {job ? <HubUpdateState job={job} following={job.id === following} /> : following !== null ? <Notice>The hub is restarting. This page reconnects when it is back.</Notice> : null}
@@ -55,9 +64,26 @@ export function SoftwarePanel() {
             result={(updated) => `The installer is updated${updated.version ? ` to ${updated.version}` : ''}.`}
             disabled={!software.data.installer.reachable}
           />
+          {software.data.programs.map((program) => (
+            <ProgramUpdate key={program.id} program={program} />
+          ))}
         </div>
       )}
     </Panel>
+  );
+}
+
+/** Updating one core program the hub updates (commd, the factory server). */
+function ProgramUpdate({ program }: { program: CoreProgram }) {
+  const update = useUpdateProgram(program.id);
+  return (
+    <PackageAction
+      title={`Update ${program.name}`}
+      text="The hub restarts it with the package and waits until it runs it, up to two minutes. If the new one does not stay up, the old one comes back."
+      busyText="Updating, up to two minutes"
+      send={update}
+      result={(updated) => `${program.name} is updated${updated.version ? ` to ${updated.version}` : ''}.`}
+    />
   );
 }
 

@@ -114,8 +114,10 @@ export function MeshGraph({ peers, selfIdentity, selfIsAdmin = false, selected, 
   // Only the projection changes while the camera moves; the layout follows the peers alone.
   const layout = useMemo(() => layoutMesh(peers), [peers]);
   // The rings to draw. A ring is named by its hop count; devices out of range get one more, just past the furthest.
-  const rings = layout.outOfRangeRing === null ? layout.rings : [...layout.rings, layout.outOfRangeRing];
-  const outermost = rings.at(-1) ?? 0;
+  // Alone, this device still gets the first-hop ring, so the radar sweeps around it while it listens.
+  const known = layout.outOfRangeRing === null ? layout.rings : [...layout.rings, layout.outOfRangeRing];
+  const rings = known.length > 0 ? known : [1];
+  const outermost = rings.at(-1) ?? 1;
   /** Distance of a ring from the centre, in hops. */
   const reach = (ring: number) => {
     if (ring === 0) return 0;
