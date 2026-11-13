@@ -305,6 +305,21 @@ export type BandRange = 'sub_ghz' | '2g4';
 /** The four bands: two radio modules (A, B), each with a sub-GHz and a 2.4 GHz transceiver. */
 export type BandId = 'a_sub' | 'a_24' | 'b_sub' | 'b_24';
 
+/** One of the board's sub-GHz filters, chosen by its index. */
+export interface RadioFilter {
+  index: number;
+  label: string;
+  /** Passband. */
+  minMhz: number;
+  maxMhz: number;
+}
+
+/** A band's filter: `auto` (the narrowest that passes the channel centre, else the wide one) or a filter's index. */
+export type FilterChoice = 'auto' | number;
+
+/** `unavailable`: the radio daemon cannot be asked (the choice is kept). `none`: nothing to choose on this band. */
+export type FilterState = 'ok' | 'unavailable' | 'none';
+
 export interface RadioBand {
   id: BandId;
   module: ModuleIndex;
@@ -324,6 +339,13 @@ export interface RadioBand {
   rangesHz?: [number, number][];
   capabilities?: RadioCapability[];
   pendingSwitch?: PendingSwitch | null;
+  /** What this board's front end is built for on this band, in MHz; shown, never enforced. Absent from older hubs. */
+  boardRangeMhz?: [number, number] | null;
+  filter?: FilterChoice;
+  filters?: RadioFilter[];
+  /** The index of the filter in use now. */
+  activeFilter?: number | null;
+  filterState?: FilterState;
 }
 
 /** One packet seen on the air, sent or received. */

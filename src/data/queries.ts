@@ -10,6 +10,7 @@ import {
   type HubEvents,
   type HubTopic,
   type BandId,
+  type FilterChoice,
   type NetworkState,
   type NodeList,
   type Peer,
@@ -243,6 +244,15 @@ export function useUpdateRadioBand() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ id, config }: { id: BandId; config: RadioConfig }) => api.radio.updateBand(id, config),
+    onSuccess: (updated) => replaceById<RadioBand>(client, keys.radio, updated),
+  });
+}
+
+/** A band's sub-GHz filter: `auto` or a filter's index. */
+export function useSetRadioBandFilter() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, filter }: { id: BandId; filter: FilterChoice }) => api.radio.setBandFilter(id, filter),
     onSuccess: (updated) => replaceById<RadioBand>(client, keys.radio, updated),
   });
 }

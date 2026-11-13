@@ -279,4 +279,26 @@ describe('mock hub', () => {
       vi.useRealTimers();
     }
   });
+
+  it('offers the r30 filters on the sub-GHz bands, any of them selectable, with auto following the frequency', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    const bands = await api.radio.bands();
+    const aSub = bands.find((band) => band.id === 'a_sub')!;
+    expect(aSub.filters?.map((filter) => filter.label)).toEqual(['Wide 730–960 MHz', '868 MHz', '915 MHz']);
+    expect(aSub.boardRangeMhz).toEqual([863, 928]);
+    // 869.535 MHz + 11 × 200 kHz: the 868 MHz filter.
+    expect([aSub.filter, aSub.activeFilter]).toEqual(['auto', 1]);
+    expect(bands.find((band) => band.id === 'a_24')!.filterState).toBe('none');
+
+    // A filter that does not pass the frequency is still taken.
+    const pinned = await api.radio.setBandFilter('a_sub', 2);
+    expect([pinned.filter, pinned.activeFilter]).toEqual([2, 2]);
+    await expect(api.radio.setBandFilter('a_sub', 3)).rejects.toMatchObject({ code: 'validation_failed', fields: { filter: expect.any(String) } });
+    await expect(api.radio.setBandFilter('a_24', 0)).rejects.toMatchObject({ code: 'validation_failed' });
+
+    const auto = await api.radio.setBandFilter('a_sub', 'auto');
+    const moved = await api.radio.updateBand('a_sub', { ...auto.config, frequencyHz: 915_000_000, channel: 0 });
+    expect(moved.activeFilter).toBe(2);
+  });
 });

@@ -426,6 +426,7 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
         const result = await write<{ switch_at_ts_ms: number; nodes: number }>('PUT', `${path`/radio/bands/${id}`}?scope=network`, fromRadioConfig(config));
         return { switchAt: result.switch_at_ts_ms, nodes: result.nodes };
       },
+      setBandFilter: async (id, filter) => toBand(await write<WireRadioBand>('PUT', path`/radio/bands/${id}/filter`, { filter })),
       stats: async () => (await get<WireRadioBandStats[]>('/radio/stats')).map(toBandStats),
       async frames(options = {}) {
         const query = new URLSearchParams();

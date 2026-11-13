@@ -422,6 +422,35 @@ describe('model mapping', () => {
     await api.ptt.stopTestTx();
   });
 
+  it('reads the board filters and range, and sets a filter by index', async () => {
+    const wire: WireRadioBand = {
+      ...BAND,
+      id: 'b_sub',
+      range: 'sub_ghz',
+      min_mhz: 390,
+      max_mhz: 510,
+      filter: 2,
+      filters: [
+        { index: 0, label: 'Wide 330–565 MHz', min_mhz: 330, max_mhz: 565 },
+        { index: 1, label: '445–475 MHz', min_mhz: 445, max_mhz: 475 },
+        { index: 2, label: '424–442 MHz', min_mhz: 424, max_mhz: 442 },
+      ],
+      active_filter: 2,
+      filter_state: 'ok',
+    };
+    const { api, calls } = makeApi({ 'GET /auth/state': { body: AUTH }, 'PUT /radio/bands/b_sub/filter': { body: wire } });
+    const band = await api.radio.setBandFilter('b_sub', 2);
+    expect(calls.at(-1)!.body).toEqual({ filter: 2 });
+    expect(band.boardRangeMhz).toEqual([390, 510]);
+    expect(band.filters![1]).toEqual({ index: 1, label: '445–475 MHz', minMhz: 445, maxMhz: 475 });
+    expect([band.filter, band.activeFilter, band.filterState]).toEqual([2, 2, 'ok']);
+    // An older hub says nothing about filters; a hub without the radio daemon has no range.
+    const { api: older } = makeApi({ 'GET /radio/bands': { body: [BAND, { ...BAND, min_mhz: null, max_mhz: null, filter_state: 'unavailable' }] } });
+    const [plain, unavailable] = await older.radio.bands();
+    expect('filters' in plain! || 'boardRangeMhz' in plain!).toBe(false);
+    expect([unavailable!.boardRangeMhz, unavailable!.filterState]).toEqual([null, 'unavailable']);
+  });
+
   it('maps radio settings both ways', async () => {
     const { api, calls } = makeApi({ 'GET /auth/state': { body: AUTH }, 'PUT /radio/bands/b_24': (call) => ({ body: { ...BAND, config: call.body } }) });
     const band = await api.radio.updateBand('b_24', {

@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { validationFields, type RadioBand } from '@/api';
-import { useAuthState, useRadioBands, useUpdateRadioBand, useUpdateRadioBandEverywhere } from '@/data/queries';
+import { useAuthState, useRadioBands, useSetRadioBandFilter, useUpdateRadioBand, useUpdateRadioBandEverywhere } from '@/data/queries';
 import { formatFrequency } from '@/lib/format';
 import { DEFAULT_TRAFFIC_RANGE, TRAFFIC_RANGES, TrafficChart } from '@/features/traffic/TrafficChart';
 import { Page } from '@/shell/Page';
-import { Badge, Button, Dialog, FormError, LoadError, Notice, Panel, Segmented, Skeleton } from '@/ui';
+import { Badge, Button, Dialog, Field, FormError, LoadError, Notice, Panel, Segmented, Select, Skeleton } from '@/ui';
 import { BAND_NAMES } from './bands';
+import { boardRangeHint, filterNote, outsideBoardRange } from './filters';
 import { useBandFrames } from './frameHistory';
 import { centreHz, RadioConfigFields, useRadioDraft } from './RadioConfigFields';
 import { Waterfall } from './Waterfall';
@@ -106,6 +107,7 @@ function BandForm({ band }: { band: RadioBand }) {
   return (
     <form className={styles.form} onSubmit={onSubmit} noValidate>
       <RadioConfigFields draft={draft} errors={fieldErrors} capabilities={band.capabilities ?? []} />
+      <BandFrontEnd band={band} centre={centreHz(draft.config)} canChange={isAdmin} />
 
       {mesh && draft.dirty ? (
         <Notice tone="warn">
@@ -161,5 +163,40 @@ function BandForm({ band }: { band: RadioBand }) {
         </Dialog>
       ) : null}
     </form>
+  );
+}
+
+/** The board's range for the band and its sub-GHz filter. Informative: nothing here limits the settings. */
+function BandFrontEnd({ band, centre, canChange }: { band: RadioBand; centre: number; canChange: boolean }) {
+  const setFilter = useSetRadioBandFilter();
+  const range = boardRangeHint(band);
+  const outside = outsideBoardRange(band, centre);
+  const filters = band.filters ?? [];
+  const active = filters.find((filter) => filter.index === band.activeFilter);
+  return (
+    <>
+      {range ? <p className={styles.hint}>{outside ? `${range}. Outside this board's range.` : range}</p> : null}
+      {band.filterState === 'unavailable' ? (
+        <p className={styles.hint}>Filter control unavailable</p>
+      ) : band.filterState === 'ok' && filters.length > 0 ? (
+        <Field label="Filter" hint={filterNote(band, centre) ?? undefined} error={setFilter.error?.message}>
+          {(field) => (
+            <Select
+              {...field}
+              value={String(band.filter ?? 'auto')}
+              disabled={!canChange || setFilter.isPending}
+              onChange={(event) => setFilter.mutate({ id: band.id, filter: event.target.value === 'auto' ? 'auto' : Number(event.target.value) })}
+            >
+              <option value="auto">{active ? `Auto (${active.label})` : 'Auto'}</option>
+              {filters.map((filter) => (
+                <option key={filter.index} value={String(filter.index)}>
+                  {filter.label}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      ) : null}
+    </>
   );
 }

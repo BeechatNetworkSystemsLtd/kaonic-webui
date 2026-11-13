@@ -165,6 +165,12 @@ export interface WireRadioBand {
   ranges_hz?: [number, number][];
   capabilities?: string[];
   pending_switch?: { at_ts_ms: number; switched: boolean; config: WireRadioConfig } | null;
+  min_mhz?: number | null;
+  max_mhz?: number | null;
+  filter?: 'auto' | number;
+  filters?: { index: number; label: string; min_mhz: number; max_mhz: number }[];
+  active_filter?: number | null;
+  filter_state?: 'ok' | 'unavailable' | 'none';
 }
 
 export interface WireRadioFrame {

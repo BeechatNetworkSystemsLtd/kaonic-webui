@@ -6,6 +6,7 @@ import type {
   SoftwareEvent,
   RadioBand,
   RadioCapability,
+  RadioFilter,
   ServiceStatus,
   SourceId,
 } from '../types';
@@ -33,8 +34,23 @@ function shape(range: 'sub_ghz' | '2g4') {
     capabilities: [...CAPABILITIES],
     state: 'idle',
     pendingSwitch: null,
+    ...frontEnd(range),
   };
 }
+/** The kaonic1s r30's sub-GHz filters, in the board's order. */
+export const R30_FILTERS: RadioFilter[] = [
+  { index: 0, label: 'Wide 730–960 MHz', minMhz: 730, maxMhz: 960 },
+  { index: 1, label: '868 MHz', minMhz: 862, maxMhz: 876 },
+  { index: 2, label: '915 MHz', minMhz: 902, maxMhz: 928 },
+];
+
+/** The r30's front end: its range per band, and the filters on the sub-GHz bands. */
+function frontEnd(range: 'sub_ghz' | '2g4') {
+  return range === 'sub_ghz'
+    ? { boardRangeMhz: [863, 928] as [number, number], filter: 'auto' as const, filters: R30_FILTERS.map((filter) => ({ ...filter })), activeFilter: null, filterState: 'ok' as const }
+    : { boardRangeMhz: [2400, 2483.5] as [number, number], filter: 'auto' as const, filters: [], activeFilter: null, filterState: 'none' as const };
+}
+
 /** What the driver starts with on every band. */
 const DRIVER = () => ({
   fcs: false,

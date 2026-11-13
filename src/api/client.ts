@@ -10,6 +10,7 @@ import type {
   KernelInstallOptions,
   ConsumerId,
   Device,
+  FilterChoice,
   HotspotConfig,
   HubEvents,
   HubTopic,
@@ -180,6 +181,8 @@ export interface HubApi {
      * all switch at `switchAt`; a node that hears nobody within 60 s goes back.
      */
     updateBandEverywhere(id: BandId, config: RadioConfig): Promise<{ switchAt: number; nodes: number }>;
+    /** The band's sub-GHz filter, applied straight away for the frequency the band runs now. */
+    setBandFilter(id: BandId, filter: FilterChoice): Promise<RadioBand>;
     /** Every band's counters since the hub started. */
     stats(): Promise<RadioBandStats[]>;
     /** The frames the hub still holds, oldest first: the analyser's start before the live feed. */

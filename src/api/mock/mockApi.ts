@@ -191,7 +191,18 @@ export function createMockApi(options: MockOptions = {}): HubApi {
 
   /* ── in-memory state ── */
 
-  let radio = seedRadio();
+  let radio = seedRadio().map(refreshFilter);
+
+  /** What the radio daemon would do: the chosen filter, or the narrowest that passes the channel centre, else the wide one. */
+  function refreshFilter(band: RadioBand): RadioBand {
+    const filters = band.filters ?? [];
+    const centre = band.config.frequencyHz + band.config.channel * band.config.channelSpacingHz;
+    const passing = filters.filter((filter) => centre >= filter.minMhz * 1e6 && centre <= filter.maxMhz * 1e6);
+    passing.sort((a, b) => a.maxMhz - a.minMhz - (b.maxMhz - b.minMhz));
+    const chosen = typeof band.filter === 'number' ? band.filter : (passing[0] ?? filters[0])?.index;
+    band.activeFilter = chosen ?? null;
+    return band;
+  }
 
   /** The hub's checks on a band change: the channel centre inside the band, the mesh band never off. */
   function checkBand(id: BandId, config: RadioConfig): RadioBand {
@@ -376,7 +387,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     save(null);
     // A reset device is a new device: it gets a new identity on its next boot.
     storage.removeItem(BOOT_IDENTITY_KEY);
-    radio = seedRadio();
+    radio = seedRadio().map(refreshFilter);
     peers = seedPeers();
     services = seedServices();
     installer.reset();
@@ -1331,7 +1342,19 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       updateBand: authed((id, config) => {
         const band = checkBand(id, config);
         band.config = { ...band.config, ...config };
-        return band;
+        return refreshFilter(band);
+      }),
+      setBandFilter: authed((id, filter) => {
+        const band = radio.find((candidate) => candidate.id === id);
+        if (!band) throw new ApiError('not_found', 'Unknown radio band.');
+        const count = band.filters?.length ?? 0;
+        if (filter !== 'auto' && !(Number.isInteger(filter) && filter >= 0 && filter < count)) {
+          throw new ApiError('validation_failed', 'Check the fields.', {
+            filter: count ? `This radio has filters 0 to ${count - 1}, or auto.` : 'This band has no filter to choose; use auto.',
+          });
+        }
+        band.filter = filter;
+        return refreshFilter(band);
       }),
       updateBandEverywhere: authed((id, config) => {
         const band = checkBand(id, config);
@@ -1344,6 +1367,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
         setTimeout(() => {
           band.config = { ...band.config, ...config };
           band.pendingSwitch = null;
+          refreshFilter(band);
         }, 10_000);
         return { switchAt, nodes: peers.filter((peer) => peer.trust.network === 'ours').length };
       }),

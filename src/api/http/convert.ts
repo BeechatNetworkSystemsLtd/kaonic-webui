@@ -282,6 +282,13 @@ export const toBand = (wire: WireRadioBand): RadioBand => ({
   ...(wire.pending_switch !== undefined
     ? { pendingSwitch: wire.pending_switch ? { at: wire.pending_switch.at_ts_ms, switched: wire.pending_switch.switched, config: toRadioConfig(wire.pending_switch.config) } : null }
     : {}),
+  ...(wire.min_mhz !== undefined || wire.max_mhz !== undefined
+    ? { boardRangeMhz: wire.min_mhz != null && wire.max_mhz != null ? ([wire.min_mhz, wire.max_mhz] as [number, number]) : null }
+    : {}),
+  ...(wire.filter !== undefined ? { filter: wire.filter } : {}),
+  ...(wire.filters ? { filters: wire.filters.map((filter) => ({ index: filter.index, label: filter.label, minMhz: filter.min_mhz, maxMhz: filter.max_mhz })) } : {}),
+  ...(wire.active_filter !== undefined ? { activeFilter: wire.active_filter } : {}),
+  ...(wire.filter_state !== undefined ? { filterState: wire.filter_state } : {}),
 });
 
 export const toFrame = (wire: WireRadioFrame): RadioFrame => ({
