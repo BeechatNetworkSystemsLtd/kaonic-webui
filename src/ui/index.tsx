@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react';
+import { useEffect, useId, useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { CircleAlert, Info, X } from 'lucide-react';
 import { errorMessage, isApiError } from '@/api';
 import styles from './ui.module.css';
@@ -158,6 +158,10 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
 
 export function Select({ className, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...rest} className={cx(styles.input, className)} />;
+}
+
+export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...rest} className={cx(styles.input, styles.textarea, className)} />;
 }
 
 /* ── Segmented control ── */

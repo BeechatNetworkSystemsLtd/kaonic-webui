@@ -40,6 +40,9 @@ import type {
   RadioBandStats,
   RadioConfig,
   RadioFrame,
+  RadioTest,
+  RadioTestRequest,
+  ModuleIndex,
   RemotePttSettings,
   RemoteShell,
   RemoteShellHandlers,
@@ -184,6 +187,13 @@ export interface HubApi {
     updateBandEverywhere(id: BandId, config: RadioConfig): Promise<{ switchAt: number; nodes: number }>;
     /** The band's sub-GHz filter, applied straight away for the frequency the band runs now. */
     setBandFilter(id: BandId, filter: FilterChoice): Promise<RadioBand>;
+    /** Sends a test message on a band (once), or starts sending it repeatedly; replaces the band's running test. */
+    startTest(id: BandId, request: RadioTestRequest): Promise<RadioTest>;
+    /** The band's last test run, or null if none ran. */
+    test(id: BandId): Promise<RadioTest | null>;
+    stopTest(id: BandId): Promise<RadioTest | null>;
+    /** Moves the mesh (and what rides on it) to radio A (0) or B (1); the hub restarts on it. */
+    setMeshRadio(module: ModuleIndex): Promise<{ interface: string; restarting: boolean }>;
     /** Every band's counters since the hub started. */
     stats(): Promise<RadioBandStats[]>;
     /** The frames the hub still holds, oldest first: the analyser's start before the live feed. */

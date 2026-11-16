@@ -217,6 +217,12 @@
 .input[aria-invalid='true'] {
   border-color: var(--danger);
 }
+textarea.input {
+  padding: var(--s2) var(--s3);
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.9375rem;
+}
 select.input {
   appearance: none;
   padding-right: var(--s6);

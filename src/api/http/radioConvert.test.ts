@@ -21,3 +21,23 @@ describe('radio config on the wire', () => {
     expect('cca' in minimal || 'frontend' in minimal || 'fcs' in minimal).toBe(false);
   });
 });
+
+describe('radio tests on the wire', () => {
+  it('reads a run, and a band that ran none as null', async () => {
+    const { toRadioTest, fromRadioTestRequest } = await import('./convert');
+    expect(toRadioTest({ running: false })).toBeNull();
+    expect(toRadioTest(null)).toBeNull();
+    expect(toRadioTest({ running: true, sent: 3, failed: 1, bytes: 5, interval_ms: 1000, count: null, started_ts_ms: 42, last_error: 'busy' })).toEqual({
+      running: true,
+      sent: 3,
+      failed: 1,
+      bytes: 5,
+      intervalMs: 1000,
+      count: null,
+      startedAt: 42,
+      lastError: 'busy',
+    });
+    expect(fromRadioTestRequest({ message: 'hi', format: 'text' })).toEqual({ message: 'hi', format: 'text' });
+    expect(fromRadioTestRequest({ message: 'hi', format: 'hex', intervalMs: 500, count: 2 })).toEqual({ message: 'hi', format: 'hex', interval_ms: 500, count: 2 });
+  });
+});

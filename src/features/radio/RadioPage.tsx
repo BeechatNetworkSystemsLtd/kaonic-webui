@@ -9,11 +9,13 @@ import { BAND_NAMES } from './bands';
 import { boardRangeHint, filterNote, outsideBoardRange } from './filters';
 import { useBandFrames } from './frameHistory';
 import { centreHz, RadioConfigFields, useRadioDraft } from './RadioConfigFields';
+import { MeshRadioPanel, RadioTestDialog, RunningTestNotice } from './RadioTest';
 import { Waterfall } from './Waterfall';
 import styles from './RadioPage.module.css';
 
 export default function RadioPage() {
   const radio = useRadioBands();
+  const auth = useAuthState();
   const [windowMs, setWindowMs] = useState<number>(DEFAULT_TRAFFIC_RANGE);
 
   return (
@@ -27,14 +29,19 @@ export default function RadioPage() {
       ) : radio.isError ? (
         <LoadError error={radio.error} onRetry={() => void radio.refetch()} />
       ) : (
-        radio.data.map((band) => <BandPanel key={band.id} band={band} windowMs={windowMs} />)
+        <>
+          <MeshRadioPanel bands={radio.data} isAdmin={auth.data?.role === 'admin'} />
+          {radio.data.map((band) => (
+            <BandPanel key={band.id} band={band} windowMs={windowMs} isAdmin={auth.data?.role === 'admin'} />
+          ))}
+        </>
       )}
     </Page>
   );
 }
 
 /** One band: its settings on the left, what it is doing on the air on the right. */
-function BandPanel({ band, windowMs }: { band: RadioBand; windowMs: number }) {
+function BandPanel({ band, windowMs, isAdmin }: { band: RadioBand; windowMs: number; isAdmin: boolean }) {
   const on = band.config.modulation.kind !== 'off';
   return (
     <Panel
@@ -47,6 +54,7 @@ function BandPanel({ band, windowMs }: { band: RadioBand; windowMs: number }) {
       }
     >
       {band.pendingSwitch ? <PendingSwitchNotice band={band} /> : null}
+      {band.test?.running ? <RunningTestNotice band={band} canStop={isAdmin} /> : null}
       <div className={styles.band}>
         {/* The key resets the form to the saved values whenever they change. */}
         <BandForm key={JSON.stringify(band.config)} band={band} />
@@ -94,6 +102,7 @@ function BandForm({ band }: { band: RadioBand }) {
   const everywhere = useUpdateRadioBandEverywhere();
   const auth = useAuthState();
   const [confirming, setConfirming] = useState(false);
+  const [testing, setTesting] = useState(false);
   const fieldErrors = { ...validationFields(update.error), ...validationFields(everywhere.error) };
   const off = draft.config.modulation.kind === 'off';
   const mesh = band.usedBy.includes('mesh');
@@ -125,6 +134,11 @@ function BandForm({ band }: { band: RadioBand }) {
 
       <div className={styles.actions}>
         <span className={styles.rssi}>{off ? '' : band.lastRssi !== null ? `Last signal ${band.lastRssi} dBm` : 'No signal received yet'}</span>
+        {isAdmin && band.config.modulation.kind !== 'off' && band.state !== 'emulated' ? (
+          <Button type="button" onClick={() => setTesting(true)} title="Send a raw test frame with this band's saved settings">
+            Test message
+          </Button>
+        ) : null}
         {mesh ? (
           <Button type="button" busy={everywhere.isPending} disabled={!isAdmin || !draft.dirty || !draft.valid || off || Boolean(band.pendingSwitch)} onClick={() => setConfirming(true)}>
             Apply to all nodes
@@ -134,6 +148,8 @@ function BandForm({ band }: { band: RadioBand }) {
           {mesh ? 'Apply to this node' : 'Apply'}
         </Button>
       </div>
+
+      {testing ? <RadioTestDialog band={band} onClose={() => setTesting(false)} /> : null}
 
       {confirming ? (
         <Dialog title="Change the mesh band on every node?" onClose={() => setConfirming(false)}>

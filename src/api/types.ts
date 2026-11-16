@@ -279,7 +279,7 @@ export interface RadioConfig {
   channelSpacingHz: number;
   channel: number;
   modulation: Modulation;
-  /** 0..31 */
+  /** TX power register: 0..25 with OFDM, 0..20 with QPSK, 0..31 with FSK (`maxTxPower`). */
   txPower: number;
   /** The chip appends a frame check sequence. Left out: unchanged. */
   fcs?: boolean;
@@ -346,6 +346,33 @@ export interface RadioBand {
   /** The index of the filter in use now. */
   activeFilter?: number | null;
   filterState?: FilterState;
+  /** The band's last test message run, if any since the hub started. Absent from older hubs. */
+  test?: RadioTest | null;
+}
+
+/** How a test message's text is read: as UTF-8 text, or as hex bytes. */
+export type RadioTestFormat = 'text' | 'hex';
+
+/** A test message to send on a band: once, or every `intervalMs` until stopped (or `count` times). */
+export interface RadioTestRequest {
+  message: string;
+  format: RadioTestFormat;
+  intervalMs?: number;
+  count?: number;
+}
+
+/** A band's test message run. */
+export interface RadioTest {
+  running: boolean;
+  sent: number;
+  failed: number;
+  /** Bytes per message. */
+  bytes: number;
+  intervalMs: number | null;
+  count: number | null;
+  /** Unix milliseconds. */
+  startedAt: number;
+  lastError: string | null;
 }
 
 /** One packet seen on the air, sent or received. */

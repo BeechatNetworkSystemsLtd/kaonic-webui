@@ -330,4 +330,60 @@ describe('mock hub', () => {
     const moved = await api.radio.updateBand('a_sub', { ...auto.config, frequencyHz: 915_000_000, channel: 0 });
     expect(moved.activeFilter).toBe(2);
   });
+  it('limits the TX power per modulation', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    const aSub = (await api.radio.bands()).find((band) => band.id === 'a_sub')!;
+    await expect(api.radio.updateBand('a_sub', { ...aSub.config, txPower: 26 })).rejects.toMatchObject({ code: 'validation_failed', fields: { txPower: expect.any(String) } });
+    expect((await api.radio.updateBand('a_sub', { ...aSub.config, txPower: 25 })).config.txPower).toBe(25);
+    const qpsk = { ...aSub.config, modulation: { kind: 'qpsk' as const, chipRateKhz: 1000, rateMode: 2 } };
+    await expect(api.radio.updateBand('b_sub', { ...qpsk, txPower: 21 })).rejects.toMatchObject({ fields: { txPower: expect.any(String) } });
+    expect((await api.radio.updateBand('b_sub', { ...qpsk, txPower: 20 })).config.txPower).toBe(20);
+  });
+
+  it('sends a test message once, or repeatedly until stopped or counted out', async () => {
+    vi.useFakeTimers();
+    try {
+      const api = fresh();
+      await api.auth.setup(setup);
+      expect(await api.radio.test('a_sub')).toBeNull();
+      const once = await api.radio.startTest('a_sub', { message: '4b 41 4f', format: 'hex' });
+      expect(once).toMatchObject({ running: false, sent: 1, bytes: 3, intervalMs: null });
+      await expect(api.radio.startTest('a_sub', { message: '4b4', format: 'hex' })).rejects.toMatchObject({ code: 'validation_failed', fields: { message: expect.any(String) } });
+      await expect(api.radio.startTest('a_sub', { message: 'hi', format: 'text', intervalMs: 10 })).rejects.toMatchObject({ fields: { intervalMs: expect.any(String) } });
+
+      const repeat = await api.radio.startTest('a_sub', { message: 'hello', format: 'text', intervalMs: 1000 });
+      expect(repeat).toMatchObject({ running: true, sent: 1, bytes: 5 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await api.radio.test('a_sub')).toMatchObject({ running: true, sent: 4 });
+      expect((await api.radio.bands()).find((band) => band.id === 'a_sub')!.test).toMatchObject({ running: true });
+      const stopped = await api.radio.stopTest('a_sub');
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(await api.radio.test('a_sub')).toEqual(stopped);
+      expect(stopped).toMatchObject({ running: false, sent: 4 });
+
+      await api.radio.startTest('b_24', { message: 'x', format: 'text', intervalMs: 500, count: 3 });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await api.radio.test('b_24')).toMatchObject({ running: false, sent: 3 });
+
+      // A band that is off sends nothing.
+      await expect(api.radio.startTest('b_sub', { message: 'x', format: 'text' })).rejects.toMatchObject({ code: 'conflict' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('moves the mesh to the other radio module with the mesh band settings', async () => {
+    const api = fresh();
+    await api.auth.setup(setup);
+    const before = await api.radio.bands();
+    const aSub = before.find((band) => band.id === 'a_sub')!;
+    expect(await api.radio.setMeshRadio(0)).toEqual({ interface: 'rf09_a', restarting: false });
+    expect(await api.radio.setMeshRadio(1)).toEqual({ interface: 'rf09_b', restarting: true });
+    const after = await api.radio.bands();
+    const bSub = after.find((band) => band.id === 'b_sub')!;
+    expect(bSub.usedBy).toContain('mesh');
+    expect(bSub.config).toEqual(aSub.config);
+    expect(after.find((band) => band.id === 'a_sub')!.usedBy).toEqual([]);
+  });
 });

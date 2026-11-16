@@ -54,6 +54,7 @@ import type {
   VpnSharePatch,
   VpnUplinkInput,
 } from '../types';
+import { maxTxPower, testPayload, testProblems } from '../radioLimits';
 import { checkAdvertised, checkGateway, checkSharePatch, checkUplink, type FieldErrors } from '../vpnShare';
 import { createMockPtt } from './mockPtt';
 import { createMockShell } from './mockShell';
@@ -222,6 +223,24 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     if (config.modulation.kind === 'off' && band.usedBy.includes('mesh')) {
       throw new ApiError('validation_failed', 'The mesh runs on this band.', { modulation: 'The mesh band cannot be switched off.' });
     }
+    const maxPower = maxTxPower(config.modulation.kind);
+    if (config.txPower > maxPower) {
+      throw new ApiError('validation_failed', 'Check the highlighted fields.', { txPower: `Use 0 to ${maxPower} with this modulation.` });
+    }
+    if (config.modulation.kind === 'off') stopTest(band);
+    return band;
+  }
+
+  /** Test message runs: the mock counts the messages it would send. */
+  const testTimers = new Map<BandId, ReturnType<typeof setInterval>>();
+  function stopTest(band: RadioBand) {
+    clearInterval(testTimers.get(band.id));
+    testTimers.delete(band.id);
+    if (band.test) band.test = { ...band.test, running: false };
+  }
+  function bandById(id: BandId): RadioBand {
+    const band = radio.find((candidate) => candidate.id === id);
+    if (!band) throw new ApiError('not_found', 'There is no such band.');
     return band;
   }
   let peers = seedPeers();
@@ -407,6 +426,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     save(null);
     // A reset device is a new device: it gets a new identity on its next boot.
     storage.removeItem(BOOT_IDENTITY_KEY);
+    radio.forEach(stopTest);
     radio = seedRadio().map(refreshFilter);
     peers = seedPeers();
     services = seedServices();
@@ -1390,6 +1410,50 @@ export function createMockApi(options: MockOptions = {}): HubApi {
           refreshFilter(band);
         }, 10_000);
         return { switchAt, nodes: peers.filter((peer) => peer.trust.network === 'ours').length };
+      }),
+      startTest: authed((id, request) => {
+        const band = bandById(id);
+        if (band.config.modulation.kind === 'off') throw new ApiError('conflict', 'This band is switched off. Choose a modulation to turn it on first.');
+        const problems = testProblems(request);
+        if (Object.keys(problems).length) throw new ApiError('validation_failed', 'Check the highlighted fields.', problems);
+        stopTest(band);
+        const payload = testPayload(request.message, request.format);
+        const bytes = 'bytes' in payload ? payload.bytes.length : 0;
+        const repeat = request.intervalMs !== undefined;
+        const test = { running: repeat, sent: repeat ? 0 : 1, failed: 0, bytes, intervalMs: request.intervalMs ?? null, count: request.count ?? null, startedAt: Date.now(), lastError: null };
+        band.test = test;
+        if (repeat) {
+          const send = () => {
+            if (!band.test?.running) return;
+            const sent = band.test.sent + 1;
+            const done = band.test.count !== null && sent >= band.test.count;
+            band.test = { ...band.test, sent, running: !done };
+            if (done) stopTest(band);
+          };
+          testTimers.set(band.id, setInterval(send, request.intervalMs));
+          send();
+        }
+        return band.test;
+      }),
+      test: authed((id) => bandById(id).test ?? null),
+      stopTest: authed((id) => {
+        const band = bandById(id);
+        stopTest(band);
+        return band.test ?? null;
+      }),
+      setMeshRadio: authed((module) => {
+        const from = radio.find((band) => band.usedBy.includes('mesh'));
+        if (!from) throw new ApiError('unavailable', 'The mesh is not running on this hub, so there is nothing to move.');
+        const to = radio.find((band) => band.module === module && band.range === from.range);
+        if (!to) throw new ApiError('validation_failed', 'Check the fields.', { module: 'Use 0 (radio A) or 1 (radio B).' });
+        if (to === from) return { interface: to.interface ?? to.id, restarting: false };
+        stopTest(to);
+        to.config = { ...from.config };
+        to.filter = from.filter ?? 'auto';
+        to.usedBy = from.usedBy;
+        from.usedBy = [];
+        refreshFilter(to);
+        return { interface: to.interface ?? to.id, restarting: true };
       }),
       stats: authed(bandStats),
       frames: authed((options: { band?: BandId; limit?: number } = {}) => {

@@ -826,4 +826,20 @@ describe('live topics', () => {
     FakeSocket.last().open();
     expect(states).toEqual(['open', 'closed', 'connecting', 'open']);
   });
+  it('sends test messages and moves the mesh radio with the hub\'s paths and names', async () => {
+    const run = { running: true, sent: 0, failed: 0, bytes: 3, interval_ms: 1000, count: null, started_ts_ms: 7, last_error: null };
+    const { api, calls } = makeApi({
+      'GET /auth/state': { body: AUTH },
+      'POST /radio/bands/a_sub/test': { body: run },
+      'GET /radio/bands/b_sub/test': { body: { running: false } },
+      'POST /radio/bands/a_sub/test/stop': { body: { ...run, running: false, sent: 4 } },
+      'PUT /radio/mesh': { body: { module: 1, interface: 'rf09_b', restarting: true } },
+    });
+    expect(await api.radio.startTest('a_sub', { message: '4b414f', format: 'hex', intervalMs: 1000 })).toMatchObject({ running: true, intervalMs: 1000, startedAt: 7 });
+    expect(calls.at(-1)!.body).toEqual({ message: '4b414f', format: 'hex', interval_ms: 1000 });
+    expect(await api.radio.test('b_sub')).toBeNull();
+    expect(await api.radio.stopTest('a_sub')).toMatchObject({ running: false, sent: 4 });
+    expect(await api.radio.setMeshRadio(1)).toMatchObject({ interface: 'rf09_b', restarting: true });
+    expect(calls.at(-1)!.body).toEqual({ module: 1 });
+  });
 });

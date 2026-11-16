@@ -47,3 +47,32 @@
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s3);
+}
+.actionGroup {
+  display: inline-flex;
+  gap: var(--s2);
+}
+.testRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.testStatus {
+  font-size: var(--text-sm);
+}
+.meshRadio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.meshRadio .hint {
+  flex: 1 1 320px;
+}

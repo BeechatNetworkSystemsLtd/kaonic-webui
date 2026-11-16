@@ -5,6 +5,8 @@ import type {
   MeshPacket,
   Modulation,
   RadioCapability,
+  RadioTest,
+  RadioTestRequest,
   NetworkState,
   NodeDetails,
   NodeJob,
@@ -73,6 +75,8 @@ import type {
   WireRadioBandStats,
   WireRadioConfig,
   WireRadioFrame,
+  WireRadioTest,
+  WireRadioTestRequest,
   WireRemoteDevice,
   WireServiceStatus,
   WireSetupInput,
@@ -289,6 +293,29 @@ export const toBand = (wire: WireRadioBand): RadioBand => ({
   ...(wire.filters ? { filters: wire.filters.map((filter) => ({ index: filter.index, label: filter.label, minMhz: filter.min_mhz, maxMhz: filter.max_mhz })) } : {}),
   ...(wire.active_filter !== undefined ? { activeFilter: wire.active_filter } : {}),
   ...(wire.filter_state !== undefined ? { filterState: wire.filter_state } : {}),
+  ...(wire.test !== undefined ? { test: toRadioTest(wire.test) } : {}),
+});
+
+/** A test run, or null for the bare `{ running: false }` of a band that has run none. */
+export const toRadioTest = (wire: WireRadioTest | null | undefined): RadioTest | null =>
+  wire && wire.started_ts_ms !== undefined
+    ? {
+        running: wire.running,
+        sent: wire.sent ?? 0,
+        failed: wire.failed ?? 0,
+        bytes: wire.bytes ?? 0,
+        intervalMs: wire.interval_ms ?? null,
+        count: wire.count ?? null,
+        startedAt: wire.started_ts_ms,
+        lastError: wire.last_error ?? null,
+      }
+    : null;
+
+export const fromRadioTestRequest = (request: RadioTestRequest): WireRadioTestRequest => ({
+  message: request.message,
+  format: request.format,
+  ...(request.intervalMs !== undefined ? { interval_ms: request.intervalMs } : {}),
+  ...(request.count !== undefined ? { count: request.count } : {}),
 });
 
 export const toFrame = (wire: WireRadioFrame): RadioFrame => ({

@@ -28,6 +28,9 @@ import {
   type PttState,
   type RadioBand,
   type RadioConfig,
+  type RadioTest,
+  type RadioTestRequest,
+  type ModuleIndex,
   type RemotePttSettings,
   type SetupInput,
   type SourceId,
@@ -56,6 +59,7 @@ export const keys = {
   wifiScan: ['wifi-scan'] as const,
   radio: ['radio'] as const,
   radioStats: ['radio-stats'] as const,
+  radioTest: (id: string) => ['radio', 'test', id] as const,
   vpn: ['vpn'] as const,
   vpnPackets: ['vpn-packets'] as const,
   vpnCapture: ['vpn-capture'] as const,
@@ -255,6 +259,41 @@ export function useSetRadioBandFilter() {
   return useMutation({
     mutationFn: ({ id, filter }: { id: BandId; filter: FilterChoice }) => api.radio.setBandFilter(id, filter),
     onSuccess: (updated) => replaceById<RadioBand>(client, keys.radio, updated),
+  });
+}
+
+/** A band's test run; read every second while `watch` (a run is open), so the count moves. */
+export function useRadioTest(id: BandId, watch: boolean) {
+  return useQuery({ queryKey: keys.radioTest(id), queryFn: () => api.radio.test(id), refetchInterval: watch ? 1000 : false });
+}
+
+function setRadioTest(client: QueryClient, id: BandId, test: RadioTest | null) {
+  client.setQueryData(keys.radioTest(id), test);
+  client.setQueryData<RadioBand[]>(keys.radio, (bands) => bands?.map((band) => (band.id === id ? { ...band, test } : band)));
+}
+
+export function useStartRadioTest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, request }: { id: BandId; request: RadioTestRequest }) => api.radio.startTest(id, request),
+    onSuccess: (test, { id }) => setRadioTest(client, id, test),
+  });
+}
+
+export function useStopRadioTest() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: BandId) => api.radio.stopTest(id),
+    onSuccess: (test, id) => setRadioTest(client, id, test),
+  });
+}
+
+/** Moves the mesh to the other radio module. The hub restarts; the bands are read again after. */
+export function useSetMeshRadio() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (module: ModuleIndex) => api.radio.setMeshRadio(module),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.radio }),
   });
 }
 

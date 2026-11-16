@@ -6,6 +6,8 @@ import {
   fromSetupInput,
   toAuthState,
   toBand,
+  toRadioTest,
+  fromRadioTestRequest,
   toBandStats,
   toDevice,
   toFrame,
@@ -48,6 +50,7 @@ import { createRemoteShell } from './remoteShell';
 import { BASE_URL, createTransport, type Transport } from './request';
 import type {
   WireAuthState,
+  WireRadioTest,
   WireDevice,
   WireEvent,
   WireJob,
@@ -427,6 +430,14 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
         return { switchAt: result.switch_at_ts_ms, nodes: result.nodes };
       },
       setBandFilter: async (id, filter) => toBand(await write<WireRadioBand>('PUT', path`/radio/bands/${id}/filter`, { filter })),
+      startTest: async (id, request) => {
+        const test = toRadioTest(await write<WireRadioTest>('POST', path`/radio/bands/${id}/test`, fromRadioTestRequest(request)));
+        if (!test) throw new ApiError('internal', 'The hub did not say how the test went.');
+        return test;
+      },
+      test: async (id) => toRadioTest(await get<WireRadioTest>(path`/radio/bands/${id}/test`)),
+      stopTest: async (id) => toRadioTest(await write<WireRadioTest>('POST', path`/radio/bands/${id}/test/stop`, {})),
+      setMeshRadio: async (module) => await write<{ module: number; interface: string; restarting: boolean }>('PUT', '/radio/mesh', { module }),
       stats: async () => (await get<WireRadioBandStats[]>('/radio/stats')).map(toBandStats),
       async frames(options = {}) {
         const query = new URLSearchParams();

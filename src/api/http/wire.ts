@@ -165,6 +165,7 @@ export interface WireRadioBand {
   ranges_hz?: [number, number][];
   capabilities?: string[];
   pending_switch?: { at_ts_ms: number; switched: boolean; config: WireRadioConfig } | null;
+  test?: WireRadioTest | null;
   min_mhz?: number | null;
   max_mhz?: number | null;
   filter?: 'auto' | number;
@@ -190,6 +191,25 @@ export interface WireRadioFrame {
   packet_len: number | null;
   peer_id: Hash | null;
   peer_codename: string | null;
+}
+
+/** `GET /radio/bands/{band}/test` answers `{ running: false }` alone when no test has run. */
+export interface WireRadioTest {
+  running: boolean;
+  sent?: number;
+  failed?: number;
+  bytes?: number;
+  interval_ms?: number | null;
+  count?: number | null;
+  started_ts_ms?: number;
+  last_error?: string | null;
+}
+
+export interface WireRadioTestRequest {
+  message: string;
+  format: 'text' | 'hex';
+  interval_ms?: number;
+  count?: number;
 }
 
 export interface WireRadioBandStats {

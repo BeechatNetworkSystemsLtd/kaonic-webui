@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft } from 'lucide-react';
+import { maxTxPower } from '@/api/radioLimits';
 import type { BandId, NodeDetails, Peer } from '@/api';
 import { errorMessage, validationFields } from '@/api';
 import { nodePagePath } from '@/app/pages';
@@ -197,7 +198,7 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
                   <span className={styles.bandName}>{BAND_NAMES[band.id]}</span>
                   <span className={`${styles.bandConfig} num`}>
                     {describeRadio(band.config)}
-                    {band.config.modulation.kind !== 'off' ? `, power ${band.config.txPower} of 31` : ''}
+                    {band.config.modulation.kind !== 'off' ? `, power ${band.config.txPower} of ${maxTxPower(band.config.modulation.kind)}` : ''}
                   </span>
                   {band.usedBy.length > 0 ? <Badge tone="accent">Used by {band.usedBy.join(', ')}</Badge> : null}
                   <Button size="small" onClick={() => setDialog({ kind: 'radio', band: band.id })}>Change</Button>
