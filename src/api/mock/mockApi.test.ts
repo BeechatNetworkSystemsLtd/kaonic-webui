@@ -339,6 +339,8 @@ describe('mock hub', () => {
     const qpsk = { ...aSub.config, modulation: { kind: 'qpsk' as const, chipRateKhz: 1000, rateMode: 2 } };
     await expect(api.radio.updateBand('b_sub', { ...qpsk, txPower: 21 })).rejects.toMatchObject({ fields: { txPower: expect.any(String) } });
     expect((await api.radio.updateBand('b_sub', { ...qpsk, txPower: 20 })).config.txPower).toBe(20);
+    const fsk = { ...aSub.config, modulation: { kind: 'fsk' as const } };
+    await expect(api.radio.updateBand('b_sub', { ...fsk, txPower: 21 })).rejects.toMatchObject({ fields: { txPower: expect.any(String) } });
   });
 
   it('sends a test message once, or repeatedly until stopped or counted out', async () => {

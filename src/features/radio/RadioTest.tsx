@@ -82,6 +82,8 @@ export function RadioTestDialog({ band, onClose }: { band: RadioBand; onClose: (
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    // React bubbles submit through the component tree: never into a form around this dialog.
+    event.stopPropagation();
     if (Object.keys(problems).length === 0) start.mutate({ id: band.id, request });
   }
 

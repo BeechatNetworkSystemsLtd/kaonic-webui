@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { maxTxPower, testPayload, testProblems } from './radioLimits';
 
 describe('radio limits', () => {
-  it('allows 25 with OFDM, 20 with QPSK and the full register otherwise', () => {
-    expect([maxTxPower('ofdm'), maxTxPower('qpsk'), maxTxPower('fsk'), maxTxPower('off')]).toEqual([25, 20, 31, 31]);
+  it('allows 25 with OFDM, 20 with QPSK and FSK', () => {
+    expect([maxTxPower('ofdm'), maxTxPower('qpsk'), maxTxPower('fsk'), maxTxPower('off')]).toEqual([25, 20, 20, 31]);
   });
 
   it('reads a test message as text or hex bytes, up to one frame', () => {

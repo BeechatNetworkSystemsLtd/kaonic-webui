@@ -279,7 +279,7 @@ export interface RadioConfig {
   channelSpacingHz: number;
   channel: number;
   modulation: Modulation;
-  /** TX power register: 0..25 with OFDM, 0..20 with QPSK, 0..31 with FSK (`maxTxPower`). */
+  /** TX power register: 0..25 with OFDM, 0..20 with QPSK and FSK (`maxTxPower`). */
   txPower: number;
   /** The chip appends a frame check sequence. Left out: unchanged. */
   fcs?: boolean;

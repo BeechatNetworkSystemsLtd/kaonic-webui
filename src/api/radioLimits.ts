@@ -7,9 +7,9 @@ import type { Modulation, RadioTestRequest } from './types';
 
 export type FieldErrors = Record<string, string>;
 
-/** The TX power register goes to 31; the hub allows less with OFDM and QPSK. */
+/** The TX power register goes to 31; the hub allows 25 with OFDM and 20 with QPSK and FSK. */
 export const TX_POWER_REGISTER_MAX = 31;
-export const TX_POWER_MAX: Record<Modulation['kind'], number> = { ofdm: 25, qpsk: 20, fsk: TX_POWER_REGISTER_MAX, off: TX_POWER_REGISTER_MAX };
+export const TX_POWER_MAX: Record<Modulation['kind'], number> = { ofdm: 25, qpsk: 20, fsk: 20, off: TX_POWER_REGISTER_MAX };
 
 export function maxTxPower(kind: Modulation['kind']): number {
   return TX_POWER_MAX[kind];

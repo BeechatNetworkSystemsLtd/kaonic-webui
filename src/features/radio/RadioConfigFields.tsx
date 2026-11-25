@@ -287,7 +287,7 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
           </div>
           <Field
             label={`Transmit power: ${config.txPower} of ${maxTxPower(modulation.kind)}`}
-            hint={`Use the lowest power that keeps the link stable. The limit is ${maxTxPower('ofdm')} with OFDM and ${maxTxPower('qpsk')} with QPSK.`}
+            hint={`Use the lowest power that keeps the link stable. The limit is ${maxTxPower('ofdm')} with OFDM and ${maxTxPower('qpsk')} with QPSK and FSK.`}
             error={errors.txPower ?? problems.txPower}
           >
             {(control) => (
