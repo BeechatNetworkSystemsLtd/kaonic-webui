@@ -156,8 +156,9 @@ const BODIES: Record<SectionId, ReactNode> = {
           <strong>Set it up.</strong> A new node asks how it will be used:
           <ul>
             <li>
-              <strong>Kaonic Admin</strong> — for the one device that runs the network. Besides the login password you choose a <em>seed password</em>. The admin’s identity is
-              made from it, so the same seed recreates the same admin on a replacement device. Keep it safe and private; anyone who has it can become your admin.
+              <strong>Kaonic Admin</strong> — for the one device that runs the network. The device makes a <em>seed phrase</em> of 12 or 24 words. The admin’s identity is
+              made from it, so the same words recreate the same admin on a replacement device. Write them down or save them, and keep them private; anyone who has them can
+              become your admin.
             </li>
             <li>
               <strong>Member</strong> — for every other node. It then waits for the admin to take it into the network.
@@ -294,8 +295,8 @@ const BODIES: Record<SectionId, ReactNode> = {
         </dd>
         <dt>Forgotten password</dt>
         <dd>
-          The login password can’t be recovered: factory reset the device and set it up again. On the admin device, setting it up again with the same <em>seed password</em>
-          recreates the same admin, so the network keeps trusting it. If the seed is lost too, every node has to be factory reset and paired with a new admin.
+          The login password can’t be recovered: factory reset the device and set it up again. On the admin device, setting it up again with the same <em>seed phrase</em>
+          recreates the same admin, so the network keeps trusting it. If the phrase is lost too, every node has to be factory reset and paired with a new admin.
         </dd>
       </dl>
     </>

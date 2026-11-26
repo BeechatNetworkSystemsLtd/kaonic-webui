@@ -1,4 +1,5 @@
 import type {
+  AdminSecret,
   AuthState,
   Battery,
   Device,
@@ -79,6 +80,7 @@ import type {
   WireRadioTestRequest,
   WireRemoteDevice,
   WireServiceStatus,
+  WireAdminSecret,
   WireSetupInput,
   WireSystemMetrics,
   WireTrafficCounters,
@@ -116,13 +118,17 @@ export function fieldName(path: string): string {
 
 export const toAuthState = (wire: WireAuthState): AuthState => ({
   setupRequired: wire.setup_required,
+  // A hub older than optional passwords always has one.
+  passwordSet: wire.password_set ?? true,
   authenticated: wire.authenticated,
   role: wire.role,
 });
 
+export const fromAdminSecret = (secret: AdminSecret): WireAdminSecret => ({ seed_phrase: secret.seedPhrase });
+
 export function fromSetupInput(input: SetupInput): WireSetupInput {
   const common = { password: input.password, codename: input.codename };
-  return input.mode === 'admin' ? { mode: 'admin', ...common, seed_password: input.seedPassword } : { mode: 'member', ...common };
+  return input.mode === 'admin' ? { mode: 'admin', ...common, ...fromAdminSecret(input) } : { mode: 'member', ...common };
 }
 
 export const toDevice = (wire: WireDevice): Device => ({

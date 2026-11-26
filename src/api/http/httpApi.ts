@@ -3,6 +3,7 @@ import { ApiError } from '../errors';
 import type { HubEvents, HubTopic, NodeJob, PackageUpload, Peer, PttKeyResult, WifiScanEntry } from '../types';
 import {
   fromRadioConfig,
+  fromAdminSecret,
   fromSetupInput,
   toAuthState,
   toBand,
@@ -333,8 +334,10 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
     auth: {
       state: async () => toAuthState(await authState()),
       bootIdentity: async () => (await get<WireSetupIdentity>('/setup/identity')).identity_hash,
-      deriveIdentity: async (seedPassword) =>
-        (await transport.request<{ identity_hash: string }>('POST', '/setup/derive-identity', { seed_password: seedPassword })).identity_hash,
+      deriveIdentity: async (secret) =>
+        (await transport.request<{ identity_hash: string }>('POST', '/setup/derive-identity', fromAdminSecret(secret))).identity_hash,
+      newSeedPhrase: async (words) => (await transport.request<{ words: string[] }>('POST', '/setup/seed-phrase', { words })).words,
+      wordlist: () => get<string[]>('/setup/wordlist'),
       async setup(input) {
         signedIn(await transport.request<WireAuthState>('POST', '/setup', fromSetupInput(input)));
       },
@@ -346,7 +349,7 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
         return { usb: wire.usb, seed: wire.seed, setUp: wire.set_up };
       },
       async forgotReset(input) {
-        const body = input.method === 'usb' ? { method: 'usb', serial: input.serial, confirm: input.confirm } : { method: 'seed', seed_password: input.seedPassword, confirm: input.confirm };
+        const body = input.method === 'usb' ? { method: 'usb', serial: input.serial, confirm: input.confirm } : { method: 'seed', ...fromAdminSecret(input), confirm: input.confirm };
         await transport.request<void>('POST', '/auth/forgot/factory-reset', body);
       },
       async logout() {

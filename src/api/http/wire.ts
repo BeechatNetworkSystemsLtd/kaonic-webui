@@ -19,6 +19,7 @@ export interface WireError {
 
 export interface WireAuthState {
   setup_required: boolean;
+  password_set: boolean;
   authenticated: boolean;
   role: 'admin' | 'viewer' | null;
   csrf_token: string | null;
@@ -29,9 +30,11 @@ export interface WireSetupIdentity {
   public_identity: string;
 }
 
+export type WireAdminSecret = { seed_phrase: string };
+
 export type WireSetupInput =
-  | { mode: 'member'; password: string; codename: string }
-  | { mode: 'admin'; password: string; codename: string; seed_password: string };
+  | { mode: 'member'; password: string | null; codename: string }
+  | ({ mode: 'admin'; password: string | null; codename: string } & WireAdminSecret);
 
 /* ── device / system ── */
 

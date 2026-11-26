@@ -77,7 +77,7 @@ describe('requests', () => {
   it('keeps the CSRF token in memory and sends it with writes only', async () => {
     const { api, calls } = makeApi({ 'GET /auth/state': { body: AUTH }, 'GET /network': { body: NETWORK }, 'PATCH /network': { body: NETWORK } });
 
-    expect(await api.auth.state()).toEqual({ setupRequired: false, authenticated: true, role: 'admin' });
+    expect(await api.auth.state()).toEqual({ setupRequired: false, passwordSet: true, authenticated: true, role: 'admin' });
     await api.network.get();
     const state = await api.network.setSource('wifi_client', true);
 
@@ -507,9 +507,9 @@ describe('model mapping', () => {
 
   it('sends setup in the hub’s words and signs in with the new token', async () => {
     const { api, calls } = makeApi({ 'POST /setup': { body: { ...AUTH, csrf_token: 'fresh' } }, 'POST /device/reboot': { status: 202 } });
-    await api.auth.setup({ mode: 'admin', password: 'correct-horse', codename: 'kaon7qjt', seedPassword: 'a long enough seed phrase' });
+    await api.auth.setup({ mode: 'admin', password: 'correct-horse', codename: 'kaon7qjt', seedPhrase: 'legal winner thank year wave sausage worth useful legal winner thank yellow' });
     await api.device.reboot();
-    expect(calls[0]!.body).toEqual({ mode: 'admin', password: 'correct-horse', codename: 'kaon7qjt', seed_password: 'a long enough seed phrase' });
+    expect(calls[0]!.body).toEqual({ mode: 'admin', password: 'correct-horse', codename: 'kaon7qjt', seed_phrase: 'legal winner thank year wave sausage worth useful legal winner thank yellow' });
     // The write after setup uses the token setup returned, without asking for one.
     expect(calls.map((call) => call.path)).toEqual(['/setup', '/device/reboot']);
     expect(calls[1]!.headers['X-Kaonic-CSRF']).toBe('fresh');

@@ -1,6 +1,8 @@
 import type {
   CoreProgramId,
+  AdminSecret,
   AuthState,
+  PhraseLength,
   BandId,
   BootImage,
   BootJob,
@@ -119,8 +121,12 @@ export interface HubApi {
     state(): Promise<AuthState>;
     /** Before setup only: the identity this device generated on first boot. A member keeps it. */
     bootIdentity(): Promise<string>;
-    /** Before setup only: the admin identity a seed password derives, so a recovery can be checked before it is applied. Changes nothing. */
-    deriveIdentity(seedPassword: string): Promise<string>;
+    /** Before setup only: the admin identity a seed phrase derives, so a recovery can be checked before it is applied. Changes nothing. */
+    deriveIdentity(secret: AdminSecret): Promise<string>;
+    /** Before setup only: a new admin's seed phrase, made by the device. It keeps nothing until setup. */
+    newSeedPhrase(words: PhraseLength): Promise<string[]>;
+    /** The words a seed phrase is made of, for typing one in. */
+    wordlist(): Promise<string[]>;
     setup(input: SetupInput): Promise<void>;
     login(password: string): Promise<void>;
     logout(): Promise<void>;

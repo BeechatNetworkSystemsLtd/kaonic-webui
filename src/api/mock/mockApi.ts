@@ -3,6 +3,7 @@ import { createMockCapture } from './mockVpnCapture';
 import type { ConnectionState, HubApi } from '../client';
 import { ApiError } from '../errors';
 import type {
+  AdminSecret,
   CoreProgramId,
   BootMode,
   BootSlotId,
@@ -61,6 +62,7 @@ import { createMockShell } from './mockShell';
 import { DEFAULT_PTT_SETTINGS } from '../pttSettings';
 import { createMockPlugins } from './mockPlugins';
 import { DEFAULT_SWITCHES, seedPeers, seedRadio, seedServices } from './seed';
+import { generatePhrase, normalisePhrase, phraseProblem, WORDS } from './phrase';
 
 /*
  * An in-browser stand-in for the hub. It keeps enough state to walk through
@@ -97,7 +99,8 @@ export interface MockOptions {
 const MOCK_SERIAL = 'K1S-30-004217';
 
 interface Persisted {
-  password: string;
+  /** Null: the UI opens without a password. */
+  password: string | null;
   codename: string;
   /** Absent in state saved before provisioning modes existed: the boot identity then stands in. */
   identityHash?: string;
@@ -111,13 +114,12 @@ const STORAGE_KEY = 'kaonic-mock-v1';
 const BOOT_IDENTITY_KEY = 'kaonic-mock-boot-identity';
 const CODENAME_PATTERN = /^[a-z0-9]{8}$/;
 const MIN_PASSWORD = 8;
-const MIN_SEED_PASSWORD = 12;
 
 const randomIdentity = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
-/** Stands in for the hub's key derivation: the same seed password always gives the same identity. */
-async function identityFromSeed(seedPassword: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kaonic-admin:${seedPassword}`));
+/** Stands in for the hub's key derivation: the same words always give the same identity. */
+async function identityFromSeed(seed: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`kaonic-admin:${seed}`));
   return Array.from(new Uint8Array(digest).slice(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
@@ -167,7 +169,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
   const installer = createMockPlugins({
     checkPassword(password) {
       // A wrong password here is a mistake in a form, not a lost session.
-      if (password !== persisted?.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
+      if (persisted?.password != null && password !== persisted.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
     },
     releaseKey: options.releaseKey,
     installerRunning: options.installerRunning,
@@ -183,10 +185,11 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     return identity;
   }
 
-  function checkSeedPassword(seedPassword: string) {
-    if (seedPassword.length < MIN_SEED_PASSWORD) {
-      throw new ApiError('validation_failed', 'Check the highlighted fields.', { seedPassword: `Use at least ${MIN_SEED_PASSWORD} characters.` });
-    }
+  /** The seed phrase the admin keys are derived from, checked as the hub checks it. */
+  async function adminSeed(secret: AdminSecret): Promise<string> {
+    const problem = await phraseProblem(secret.seedPhrase);
+    if (problem) throw new ApiError('validation_failed', 'Check the highlighted fields.', { seedPhrase: problem });
+    return normalisePhrase(secret.seedPhrase);
   }
 
   async function beforeSetup() {
@@ -1000,7 +1003,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
   }
 
   const boot = createMockBoot((password) => {
-    if (password !== persisted?.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
+    if (persisted?.password != null && password !== persisted.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
   });
   const vpnCapture = createMockCapture('10.20.1.1', '10.20.0.0/16', () =>
     peers.filter((peer) => peer.online && peer.list === 'whitelist' && peer.tunnelIp).map((peer) => ({ id: peer.id, codename: peer.codename, ip: peer.tunnelIp! })),
@@ -1174,44 +1177,62 @@ export function createMockApi(options: MockOptions = {}): HubApi {
           }
         } else {
           if ((persisted.mode ?? 'admin') !== 'admin') {
-            throw new ApiError('forbidden', 'Only the Kaonic Admin device is reset with a seed password. Connect a computer by USB cable to reset this device.', {}, 'seed_unavailable');
+            throw new ApiError('forbidden', 'Only the Kaonic Admin device is reset with a seed phrase. Connect a computer by USB cable to reset this device.', {}, 'seed_unavailable');
           }
-          if ((await identityFromSeed(input.seedPassword)) !== persisted.identityHash) {
-            throw new ApiError('validation_failed', 'Check the highlighted fields.', { seedPassword: "This is not the seed password of this device's admin." });
+          if ((await identityFromSeed(await adminSeed(input))) !== persisted.identityHash) {
+            throw new ApiError('validation_failed', 'Check the highlighted fields.', { seedPhrase: "This is not the seed phrase of this device's admin." });
           }
         }
         eraseEverything();
       },
       async state() {
         await wait();
+        // Without a password, opening the UI signs in, as the hub does.
+        if (persisted && persisted.password === null && !persisted.loggedIn) save({ ...persisted, loggedIn: true });
         const authenticated = persisted?.loggedIn ?? false;
-        return { setupRequired: persisted === null, authenticated, role: authenticated ? 'admin' : null };
+        return { setupRequired: persisted === null, passwordSet: persisted?.password != null, authenticated, role: authenticated ? 'admin' : null };
       },
       async bootIdentity() {
         await beforeSetup();
         return bootIdentity();
       },
-      async deriveIdentity(seedPassword) {
+      async deriveIdentity(secret) {
         await beforeSetup();
-        checkSeedPassword(seedPassword);
-        return identityFromSeed(seedPassword);
+        return identityFromSeed(await adminSeed(secret));
+      },
+      async newSeedPhrase(words) {
+        await beforeSetup();
+        return generatePhrase(words);
+      },
+      async wordlist() {
+        await wait();
+        return [...WORDS];
       },
       async setup(input) {
         await beforeSetup();
         const fields: Record<string, string> = {};
-        if (input.password.length < MIN_PASSWORD) fields.password = `Use at least ${MIN_PASSWORD} characters.`;
+        const password = input.password || null;
+        if (password !== null && password.length < MIN_PASSWORD) fields.password = `Use at least ${MIN_PASSWORD} characters.`;
         if (!CODENAME_PATTERN.test(input.codename)) fields.codename = 'Use exactly 8 lowercase letters or digits.';
-        if (input.mode === 'admin' && input.seedPassword.length < MIN_SEED_PASSWORD) fields.seedPassword = `Use at least ${MIN_SEED_PASSWORD} characters.`;
+        let seed: string | null = null;
+        if (input.mode === 'admin') {
+          try {
+            seed = await adminSeed(input);
+          } catch (error) {
+            if (error instanceof ApiError) Object.assign(fields, error.fields);
+            else throw error;
+          }
+        }
         if (Object.keys(fields).length) throw new ApiError('validation_failed', 'Check the highlighted fields.', fields);
-        const identityHash = input.mode === 'admin' ? await identityFromSeed(input.seedPassword) : bootIdentity();
-        save({ password: input.password, codename: input.codename, identityHash, mode: input.mode, loggedIn: true });
+        const identityHash = seed !== null ? await identityFromSeed(seed) : bootIdentity();
+        save({ password, codename: input.codename, identityHash, mode: input.mode, loggedIn: true });
         resetSwitches();
         resetWifi();
       },
       async login(password) {
         await wait();
         if (!persisted) throw new ApiError('conflict', 'This device is not set up yet.');
-        if (password !== persisted.password) throw new ApiError('unauthenticated', 'Wrong password.');
+        if (persisted.password !== null && password !== persisted.password) throw new ApiError('unauthenticated', 'Wrong password.');
         save({ ...persisted, loggedIn: true });
       },
       async logout() {
@@ -1235,7 +1256,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       reboot: authed(() => undefined),
       factoryReset: authed((password: string) => {
         // A wrong password here is a mistake in a form, not a lost session.
-        if (password !== persisted!.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
+        if (persisted!.password !== null && password !== persisted!.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
         eraseEverything();
       }),
     },

@@ -1,21 +1,29 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, errorMessage, isApiError, validationFields } from '@/api';
+import { useWordlist } from '@/data/queries';
+import type { PhraseLength } from '@/api';
 import { Button, Dialog, Field, Input, Notice, Segmented, Skeleton } from '@/ui';
+import { PhraseInput } from './SeedPhrase';
 import { availableMethods, canErase, CONFIRM_WORD, toResetInput, type ForgotForm, type ForgotMethod } from './forgotFlow';
 import styles from './Auth.module.css';
 
-const METHOD_LABELS: Record<ForgotMethod, string> = { usb: 'USB cable', seed: 'Admin seed password' };
+const METHOD_LABELS: Record<ForgotMethod, string> = { usb: 'USB cable', seed: 'Admin seed phrase' };
+const PHRASE_LENGTHS: ReadonlyArray<{ value: PhraseLength; label: string }> = [
+  { value: 12, label: '12 words' },
+  { value: 24, label: '24 words' },
+];
 
 /**
  * Erase the device after a forgotten password: explain what goes, then ask for proof of
- * ownership (the serial over the USB cable, or the admin's seed password) and ERASE.
+ * ownership (the serial over the USB cable, or the admin's seed phrase) and ERASE.
  */
 export function ForgotDialog({ onClose }: { onClose: () => void }) {
   const methods = useQuery({ queryKey: ['auth', 'forgot'], queryFn: api.auth.forgotMethods });
   const reset = useMutation({ mutationFn: api.auth.forgotReset });
   const [step, setStep] = useState<'explain' | 'confirm'>('explain');
-  const [form, setForm] = useState<ForgotForm>({ method: 'usb', serial: '', seedPassword: '', confirm: '' });
+  const [form, setForm] = useState<ForgotForm>({ method: 'usb', serial: '', words: Array(12).fill(''), confirm: '' });
+  const wordlist = useWordlist();
   const fields = validationFields(reset.error);
   const choices = methods.data ? availableMethods(methods.data) : [];
   const method = choices.includes(form.method) ? form.method : (choices[0] ?? form.method);
@@ -59,7 +67,7 @@ export function ForgotDialog({ onClose }: { onClose: () => void }) {
           </ul>
           <p className={styles.muted}>
             A member must then be added to the network again by its Kaonic Admin. On the admin device, nodes keep trusting the admin only if you set it up again with
-            the same seed password.
+            the same seed phrase.
           </p>
           {choices.length === 0 ? (
             <Notice tone="warn">
@@ -85,9 +93,16 @@ export function ForgotDialog({ onClose }: { onClose: () => void }) {
               {(control) => <Input {...control} autoFocus autoComplete="off" spellCheck={false} value={form.serial} onChange={(event) => setForm({ ...form, serial: event.target.value })} />}
             </Field>
           ) : (
-            <Field label="Admin seed password" hint="The seed password set when this device was made the Kaonic Admin." error={fields.seedPassword}>
-              {(control) => <Input {...control} type="password" autoFocus autoComplete="off" value={form.seedPassword} onChange={(event) => setForm({ ...form, seedPassword: event.target.value })} />}
-            </Field>
+            <>
+              <Segmented
+                label="Words"
+                options={PHRASE_LENGTHS}
+                value={form.words.length as PhraseLength}
+                onChange={(length) => setForm({ ...form, words: Array(length).fill('') })}
+              />
+              <PhraseInput words={form.words} onChange={(words) => setForm({ ...form, words })} wordlist={wordlist.data} autoFocus />
+              {fields.seedPhrase ? <p className={styles.error}>{fields.seedPhrase}</p> : null}
+            </>
           )}
           <Field label={`Type ${CONFIRM_WORD} to confirm`} error={fields.confirm}>
             {(control) => <Input {...control} autoComplete="off" spellCheck={false} value={form.confirm} onChange={(event) => setForm({ ...form, confirm: event.target.value })} />}

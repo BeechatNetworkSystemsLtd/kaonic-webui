@@ -13,17 +13,25 @@ export type Role = 'admin' | 'viewer';
 export interface ForgotMethods {
   /** The browser is on the USB cable: the serial number and ERASE are enough. */
   usb: boolean;
-  /** This is the Kaonic Admin device: its seed password proves the owner. */
+  /** This is the Kaonic Admin device: its seed phrase proves the owner. */
   seed: boolean;
   /** False before setup: there is nothing to erase. */
   setUp: boolean;
 }
 
-export type ForgotResetInput = { method: 'usb'; serial: string; confirm: string } | { method: 'seed'; seedPassword: string; confirm: string };
+export type ForgotResetInput = { method: 'usb'; serial: string; confirm: string } | ({ method: 'seed'; confirm: string } & AdminSecret);
+
+/** What the admin keys are made from: the seed phrase, 12 or 24 words. */
+export type AdminSecret = { seedPhrase: string };
+
+/** How many words a seed phrase has. */
+export type PhraseLength = 12 | 24;
 
 export interface AuthState {
   /** True on a factory-fresh device: show the provisioning flow, not the login. */
   setupRequired: boolean;
+  /** False when the UI opens without a password. */
+  passwordSet: boolean;
   authenticated: boolean;
   role: Role | null;
 }
@@ -37,15 +45,12 @@ export type SetupMode = 'admin' | 'member';
 
 /** What the provisioning flow collects. */
 export type SetupInput = {
-  /** Protects this UI. Separate from the seed password. */
-  password: string;
+  /** Protects this UI; null opens it without one. Separate from the seed phrase. */
+  password: string | null;
   codename: string;
 } & (
-  | {
-      mode: 'admin';
-      /** The admin key is derived from it: the same seed password always gives the same key, which is how a key is recovered. */
-      seedPassword: string;
-    }
+  /** The admin key is derived from the secret: the same words always give the same key, which is how a key is recovered. */
+  | ({ mode: 'admin' } & AdminSecret)
   | { mode: 'member' }
 );
 

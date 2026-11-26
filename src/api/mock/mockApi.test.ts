@@ -3,12 +3,13 @@ import { createMockApi, memoryStore } from './mockApi';
 
 const fresh = () => createMockApi({ latencyMs: 0, storage: memoryStore() });
 const setup = { mode: 'member', password: 'correct-horse', codename: 'kaon7qjt' } as const;
-const adminSetup = { ...setup, mode: 'admin', seedPassword: 'long enough seed phrase' } as const;
+const PHRASE = 'legal winner thank year wave sausage worth useful legal winner thank yellow';
+const adminSetup = { ...setup, mode: 'admin', seedPhrase: PHRASE } as const;
 
 describe('mock hub', () => {
   it('starts unprovisioned and refuses protected calls', async () => {
     const api = fresh();
-    expect(await api.auth.state()).toEqual({ setupRequired: true, authenticated: false, role: null });
+    expect(await api.auth.state()).toEqual({ setupRequired: true, passwordSet: false, authenticated: false, role: null });
     await expect(api.device.get()).rejects.toMatchObject({ code: 'unauthenticated' });
   });
 
@@ -20,19 +21,39 @@ describe('mock hub', () => {
     });
   });
 
-  it('derives the same admin identity from the same seed password, so a key can be recovered', async () => {
+  it('derives the same admin identity from the same seed phrase, so a key can be recovered', async () => {
     const first = fresh();
-    const derived = await first.auth.deriveIdentity(adminSetup.seedPassword);
+    const derived = await first.auth.deriveIdentity({ seedPhrase: `  ${PHRASE.toUpperCase()} ` });
     expect(derived).toMatch(/^[0-9a-f]{32}$/);
-    await expect(first.auth.deriveIdentity('short')).rejects.toMatchObject({ code: 'validation_failed', fields: { seedPassword: expect.any(String) } });
+    const mistyped = PHRASE.replace('sausage', 'sausag');
+    await expect(first.auth.deriveIdentity({ seedPhrase: mistyped })).rejects.toMatchObject({ fields: { seedPhrase: 'Not on the word list: word 6.' } });
+    const swapped = PHRASE.replace('yellow', 'zoo');
+    await expect(first.auth.deriveIdentity({ seedPhrase: swapped })).rejects.toMatchObject({ fields: { seedPhrase: expect.stringContaining('do not fit') } });
 
     await first.auth.setup(adminSetup);
     expect((await first.device.get()).identityHash).toBe(derived);
-    await expect(first.auth.deriveIdentity(adminSetup.seedPassword)).rejects.toMatchObject({ code: 'conflict' });
+    await expect(first.auth.deriveIdentity({ seedPhrase: PHRASE })).rejects.toMatchObject({ code: 'conflict' });
 
     const recovered = fresh();
     await recovered.auth.setup(adminSetup);
     expect((await recovered.device.get()).identityHash).toBe(derived);
+  });
+
+  it('makes new seed phrases of 12 or 24 words that it accepts back', async () => {
+    const api = fresh();
+    const twelve = await api.auth.newSeedPhrase(12);
+    expect(twelve).toHaveLength(12);
+    expect((await api.auth.newSeedPhrase(24)).length).toBe(24);
+    expect(await api.auth.newSeedPhrase(12)).not.toEqual(twelve);
+    await api.auth.setup({ ...adminSetup, seedPhrase: twelve.join(' ') });
+    expect((await api.auth.wordlist()).length).toBe(2048);
+  });
+
+  it('opens without a password when none is set', async () => {
+    const api = fresh();
+    await api.auth.setup({ ...setup, password: null });
+    await api.auth.logout();
+    expect(await api.auth.state()).toMatchObject({ passwordSet: false, authenticated: true });
   });
 
   it('keeps the boot identity for a member, and makes a new one after a factory reset', async () => {
@@ -52,7 +73,7 @@ describe('mock hub', () => {
     expect((await api.device.get()).codename).toBe('kaon7qjt');
 
     await api.auth.logout();
-    expect(await api.auth.state()).toEqual({ setupRequired: false, authenticated: false, role: null });
+    expect(await api.auth.state()).toEqual({ setupRequired: false, passwordSet: true, authenticated: false, role: null });
     await expect(api.auth.login('wrong-password')).rejects.toMatchObject({ code: 'unauthenticated' });
     await api.auth.login(setup.password);
     expect((await api.auth.state()).authenticated).toBe(true);

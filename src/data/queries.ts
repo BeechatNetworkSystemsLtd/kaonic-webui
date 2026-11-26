@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useMutation, useMutationState, useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   api,
+  type AdminSecret,
+  type PhraseLength,
   type CoreProgramId,
   type BootMode,
   type BootSlotId,
@@ -98,8 +100,14 @@ function resetSession(client: QueryClient) {
 /** Before setup: the identity this device was born with. It never changes until a factory reset. */
 export const useBootIdentity = () => useQuery({ queryKey: keys.bootIdentity, queryFn: api.auth.bootIdentity, staleTime: Infinity });
 
-/** Before setup: works out which admin identity a seed password gives. An action, like a Wi-Fi scan: read `data` for the result. */
-export const useDeriveIdentity = () => useMutation({ mutationFn: (seedPassword: string) => api.auth.deriveIdentity(seedPassword) });
+/** Before setup: works out which admin identity a seed phrase gives. An action, like a Wi-Fi scan: read `data` for the result. */
+export const useDeriveIdentity = () => useMutation({ mutationFn: (secret: AdminSecret) => api.auth.deriveIdentity(secret) });
+
+/** Before setup: a new admin's seed phrase, made by the device. */
+export const useNewSeedPhrase = () => useMutation({ mutationFn: (words: PhraseLength) => api.auth.newSeedPhrase(words) });
+
+/** The words a seed phrase is made of. */
+export const useWordlist = () => useQuery({ queryKey: ['auth', 'wordlist'], queryFn: api.auth.wordlist, staleTime: Infinity });
 
 export function useSetup() {
   const client = useQueryClient();
