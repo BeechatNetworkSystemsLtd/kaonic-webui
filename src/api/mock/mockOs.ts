@@ -55,7 +55,7 @@ export function createMockOs(checkPassword: (password: string) => void) {
   const busy = () => update !== null && (update.state === 'uploading' || update.state === 'checking' || update.state === 'installing');
 
   return {
-    state: (): OsState => ({ version: running, os: 'kaonic-os 2026.09', machine: MACHINE, slot: 'a', update: update ? { ...update } : null }),
+    state: (): OsState => ({ version: running, os: 'kaonic-os 2026.09', machine: MACHINE, storage: 'emmc', slot: 'a', update: update ? { ...update } : null }),
 
     async upload(file: Blob, onProgress: (fraction: number) => void): Promise<OsJob> {
       if (busy()) throw new ApiError('conflict', 'An update is already being uploaded, checked or installed.');

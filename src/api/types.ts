@@ -1225,6 +1225,8 @@ export interface OsState {
   /** The base OS version. */
   os: string;
   machine: string | null;
+  /** What the device boots from: it takes the bundle made for that. */
+  storage: 'emmc' | 'sdcard';
   slot: BootSlotId | null;
   update: OsUpdate | null;
 }

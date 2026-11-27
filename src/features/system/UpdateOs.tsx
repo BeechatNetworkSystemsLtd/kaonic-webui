@@ -141,7 +141,7 @@ function UpdateWizard({ initial, onClose }: { initial: OsState; onClose: () => v
       </ol>
       {/* Keyed by step, so each step slides in. */}
       <div key={step} className={styles.step}>
-        {step === 'choose' ? <Choose machine={state.machine} onFile={start} /> : null}
+        {step === 'choose' ? <Choose machine={state.machine} storage={state.storage} onFile={start} /> : null}
         {step === 'uploading' ? (
           <Progress
             title="Uploading"
@@ -205,7 +205,7 @@ function UpdateWizard({ initial, onClose }: { initial: OsState; onClose: () => v
   );
 }
 
-function Choose({ machine, onFile }: { machine: string | null; onFile: (file: File) => void }) {
+function Choose({ machine, storage, onFile }: { machine: string | null; storage: OsState['storage']; onFile: (file: File) => void }) {
   const [over, setOver] = useState(false);
   function onDrop(event: DragEvent) {
     event.preventDefault();
@@ -228,7 +228,7 @@ function Choose({ machine, onFile }: { machine: string | null; onFile: (file: Fi
         <FileArchive className={styles.dropIcon} aria-hidden />
         <span className={styles.dropTitle}>Drop the image here, or choose it</span>
         <span className={styles.dropHint} title={machine ?? undefined}>
-          The <span className="mono">…-emmc.tar.gz</span> file made for {machine ? <span className="mono">{machine.replace(/^stm32mp1-/, '')}</span> : 'this device'}
+          The <span className="mono">{storage === 'sdcard' ? '…-sdcard-usb.tar.gz' : '…-emmc.tar.gz'}</span> file made for {machine ? <span className="mono">{machine.replace(/^stm32mp1-/, '')}</span> : 'this device'}
         </span>
         <input
           type="file"

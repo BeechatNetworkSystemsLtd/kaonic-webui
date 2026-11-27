@@ -131,6 +131,8 @@ export interface WireOsState {
   version: string | null;
   os: string;
   machine: string | null;
+  /** Absent from hubs older than the field, which took eMMC bundles only. */
+  storage?: 'emmc' | 'sdcard';
   slot: 'a' | 'b' | null;
   update: WireOsUpdate | null;
 }
@@ -139,6 +141,7 @@ export const toOsState = (wire: WireOsState): OsState => ({
   version: wire.version,
   os: wire.os,
   machine: wire.machine,
+  storage: wire.storage ?? 'emmc',
   slot: wire.slot,
   update: wire.update
     ? {
