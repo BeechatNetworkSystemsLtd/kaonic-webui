@@ -1,4 +1,4 @@
-import type { BootImage, BootJob, BootSlot, BootStaged, BootState, KernelInstallResult } from '../types';
+import type { BootImage, BootJob, BootSlot, BootStaged, BootState, KernelInstallResult, OsJob, OsState } from '../types';
 
 /* Wire shapes of /system/boot* (snake_case), and their conversion. */
 
@@ -111,4 +111,54 @@ export const toBootJob = (wire: WireBootJob): BootJob => ({
   detail: wire.detail,
   result: wire.state === 'done' && wire.result ? toInstallResult(wire.result as WireInstallReport) : null,
   error: wire.error ? (wire.error.message ?? 'The install failed.') : null,
+});
+
+/* /system/os */
+
+export interface WireOsUpdate {
+  state: 'uploading' | 'checking' | 'ready' | 'invalid' | 'installing' | 'installed';
+  size: number;
+  uploaded_ts: number;
+  job_id: string | null;
+  version: string | null;
+  built: string | null;
+  compared: 'newer' | 'same' | 'older' | null;
+  error: string | null;
+  slot: 'a' | 'b' | null;
+}
+
+export interface WireOsState {
+  version: string | null;
+  os: string;
+  machine: string | null;
+  slot: 'a' | 'b' | null;
+  update: WireOsUpdate | null;
+}
+
+export const toOsState = (wire: WireOsState): OsState => ({
+  version: wire.version,
+  os: wire.os,
+  machine: wire.machine,
+  slot: wire.slot,
+  update: wire.update
+    ? {
+        state: wire.update.state,
+        size: wire.update.size,
+        uploadedTs: wire.update.uploaded_ts,
+        jobId: wire.update.job_id,
+        version: wire.update.version,
+        built: wire.update.built,
+        compared: wire.update.compared,
+        error: wire.update.error,
+        slot: wire.update.slot,
+      }
+    : null,
+});
+
+export const toOsJob = (wire: WireBootJob): OsJob => ({
+  id: wire.id,
+  state: wire.state,
+  progress: wire.progress ?? 0,
+  detail: wire.detail,
+  error: wire.state === 'failed' ? (wire.error?.message ?? wire.detail ?? 'It did not complete.') : null,
 });

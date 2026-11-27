@@ -394,6 +394,10 @@ select.input {
   box-shadow: var(--shadow-pop);
   overflow: hidden;
 }
+.dialog[data-wide] {
+  width: min(760px, calc(100vw - var(--s5)));
+  max-height: min(860px, calc(100dvh - var(--s6)));
+}
 .dialog[open] {
   display: flex;
   flex-direction: column;

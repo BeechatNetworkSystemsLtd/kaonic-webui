@@ -9,6 +9,25 @@
   margin: 0 auto;
   padding: var(--s5) var(--s5) var(--s7);
 }
+.page[data-fill] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-bottom: var(--s4);
+}
+/* A phone on its side has little height: the title is enough. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .page[data-fill] {
+    gap: var(--s2);
+    padding-top: var(--s3);
+  }
+  .page[data-fill] .description {
+    display: none;
+  }
+  .page[data-fill] .header {
+    margin-bottom: 0;
+  }
+}
 .header {
   display: flex;
   flex-wrap: wrap;

@@ -45,7 +45,7 @@ export interface WireDevice {
   model: string;
   identity_hash: Hash;
   api_version: string;
-  versions: { hub: string; os: string; webui: string | null };
+  versions: { hub: string; os: string; image?: string | null; webui: string | null };
   uptime_secs: number;
   radio_modules: number;
   /** Absent from hubs older than the field. */
@@ -515,6 +515,8 @@ export interface WirePttTalker {
   is_admin: boolean;
   local: boolean;
   source: 'device' | 'browser' | 'udp' | 'squelch' | 'test' | null;
+  /** Absent from hubs older than the field. */
+  hops?: number | null;
 }
 
 export interface WirePttBurst {

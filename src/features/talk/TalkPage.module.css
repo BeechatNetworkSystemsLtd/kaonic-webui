@@ -7,23 +7,109 @@
   font-weight: 600;
   color: var(--text-muted);
 }
-.badges {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
+
+.layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s4);
+}
+/* A phone on its side: users on the left, the button on the right, both in view. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .layout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .layout > .console {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+  }
+  .layout > .deck {
+    position: sticky;
+    top: var(--s2);
+    bottom: auto;
+    align-self: flex-start;
+    width: 240px;
+    margin-top: 0;
+    flex-shrink: 0;
+    gap: var(--s2);
+    padding: var(--s3);
+  }
+  .layout .ring {
+    --size: 96px;
+  }
+  .layout .onAir {
+    min-height: 40px;
+  }
 }
 
-/* ── Talk to all ── */
-.talk {
+/* ── the control panel: status on top, the button in the middle, the network below ── */
+.console {
   display: grid;
-  grid-template-columns: minmax(220px, auto) minmax(0, 1fr);
-  gap: var(--s6, 32px);
-  align-items: center;
+  gap: var(--s5);
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 30%, var(--accent-soft), transparent 55%),
+    var(--surface);
 }
-@container (max-width: 620px) {
-  .talk {
+/* On air from here (the button, the space bar or the device's PTT): the button turns yellow. */
+.deck[data-tone='tx'] .talkButton {
+  border-color: var(--accent-deep);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.deckSettings {
+  /* In the corner, out of the layout: the speaker's name is centred without it. */
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
+.deck {
+  /* At the bottom of the column, and kept in view when the nodes overflow it. */
+  position: sticky;
+  bottom: var(--s4);
+  z-index: 2;
+  /* Just around the speaker and the button. */
+  align-self: center;
+  width: min(100%, 340px);
+  display: grid;
+  justify-items: center;
+  gap: var(--s5);
+  margin-top: auto;
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 50% 50%, var(--accent-soft), transparent 60%),
+    var(--surface);
+  box-shadow: 0 -12px 28px rgb(0 0 0 / 0.45);
+}
+@container (max-width: 720px) {
+  .deck {
     grid-template-columns: minmax(0, 1fr);
+    gap: var(--s3);
+    padding: var(--s3);
   }
+    }
+.listen {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.network {
+  display: grid;
+  gap: var(--s3);
+}
+.networkHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
 }
 .buttonColumn {
   display: grid;
@@ -32,8 +118,8 @@
   text-align: center;
 }
 .talkButton {
-  width: 196px;
-  height: 196px;
+  width: var(--size);
+  height: var(--size);
   border-radius: 50%;
   border: 3px solid var(--accent-line);
   background: var(--surface-raised);
@@ -95,8 +181,8 @@
   }
 }
 .glyph {
-  width: 44px;
-  height: 44px;
+  width: 35px;
+  height: 35px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -107,78 +193,100 @@
   stroke: none;
 }
 .talkLabel {
-  max-width: 150px;
-  font-size: var(--text-md);
+  max-width: 120px;
+  font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.25;
 }
-.help {
-  max-width: 32ch;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
 
-/* ── Level animation (the plugin's spectrum) ── */
-.spectrum {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 3px;
-  width: 196px;
-  height: 44px;
+/* ── the button and its loudness arc ── */
+.ring {
+  --size: clamp(106px, 24vw, 138px);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--size) + 61px);
+  height: calc(var(--size) + 61px);
 }
-.bar {
-  flex: 1 1 0;
-  min-width: 2px;
-  max-width: 10px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line-strong);
-  transition: height 60ms linear;
+/* The loudness arc around the button. */
+.arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
-.spectrum[data-tone='tx'] .bar {
-  background: var(--accent);
+.arcTrack,
+.arcFill {
+  fill: none;
+  stroke-width: 2.4;
 }
-.spectrum[data-tone='rx'] .bar {
-  background: var(--ok);
+.arcTrack {
+  stroke: var(--line);
 }
-.spectrum[data-reduced] .bar {
-  transition: none;
+.arcFill {
+  stroke: var(--text-faint);
+  stroke-linecap: round;
+  transition: stroke 200ms ease;
 }
-.micUsed {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-faint);
-  text-transform: uppercase;
+.arc[data-tone='tx'] .arcFill {
+  stroke: var(--accent);
+  filter: drop-shadow(0 0 3px var(--accent-line));
+}
+.arc[data-tone='rx'] .arcFill {
+  stroke: var(--ok);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--ok) 50%, transparent));
 }
 
 /* ── On air ── */
 .onAir {
   display: grid;
-  gap: var(--s3);
-  align-content: start;
+  place-items: center;
+  /* The same height with or without a talker, so the button does not move. */
+  height: 52px;
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+.talkerBlock {
+  display: grid;
+  justify-items: center;
+  max-width: 100%;
+  min-width: 0;
+  gap: 2px;
+  animation: talkerIn 220ms ease-out;
+}
+.talkerId {
+  /* One line whatever the id, so the panel keeps its height. */
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 14px;
+  color: var(--text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .talker {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  justify-content: center;
   gap: var(--s2) var(--s3);
 }
+@keyframes talkerIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talkerBlock {
+    animation: none;
+  }
+}
 .codename {
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: 600;
-}
-.level {
-  height: 10px;
-  border-radius: 5px;
-  background: var(--surface-raised);
-  overflow: hidden;
-}
-.levelFill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ok), var(--accent) 70%, var(--warn));
-  transition: width 90ms linear;
 }
 
 /* ── Settings ── */
@@ -313,7 +421,7 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .inputFill,
-  .bar {
+  .arcFill {
     transition: none;
   }
 }
@@ -321,7 +429,7 @@
 /* ── the network's nodes ── */
 .nodeGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: var(--s2);
   margin: 0;
   padding: 0;
@@ -332,10 +440,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--s2) var(--s1);
+  gap: 1px;
+  padding: 6px 4px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
+  font-size: var(--text-xs);
   text-align: center;
   transition:
     border-color 0.2s,
@@ -353,8 +462,8 @@
   opacity: 1;
 }
 .nodeIcon {
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
 }
 .nodeTile[data-admin] .nodeIcon {
@@ -373,7 +482,71 @@
 }
 .nodeId {
   color: var(--text-faint);
+  font-size: 10px;
+}
+.signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.signalBars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 10px;
+}
+.signalBars > span {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+.signalBars > span:nth-child(1) {
+  height: 3px;
+}
+.signalBars > span:nth-child(2) {
+  height: 5px;
+}
+.signalBars > span:nth-child(3) {
+  height: 7px;
+}
+.signalBars > span:nth-child(4) {
+  height: 10px;
+}
+.signal[data-bars='4'] [data-on],
+.signal[data-bars='3'] [data-on] {
+  background: var(--ok);
+}
+.signal[data-bars='2'] [data-on] {
+  background: var(--warn);
+}
+.signal[data-bars='1'] [data-on],
+.signal[data-bars='0'] [data-on] {
+  background: var(--danger);
+}
+.audioStats {
+  /* Fixed columns and digit widths: numbers change in place, nothing moves. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s4);
+  margin: 0;
+  padding-top: var(--s2);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.audioStat {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+.audioStat dt {
+  color: var(--text-faint);
+}
+.audioStat dd {
+  min-width: 8ch;
+  margin: 0;
+  color: var(--text-muted);
 }
 .nodeAdmin {
   position: absolute;

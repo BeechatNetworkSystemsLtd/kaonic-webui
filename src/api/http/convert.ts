@@ -137,7 +137,7 @@ export const toDevice = (wire: WireDevice): Device => ({
   hostname: wire.hostname,
   model: wire.model,
   identityHash: wire.identity_hash,
-  versions: { hub: wire.versions.hub, os: wire.versions.os, webui: wire.versions.webui },
+  versions: { hub: wire.versions.hub, os: wire.versions.os, image: wire.versions.image ?? null, webui: wire.versions.webui },
   uptimeSecs: wire.uptime_secs,
   radioModules: wire.radio_modules,
   isAdmin: wire.is_admin ?? false,
@@ -641,6 +641,7 @@ export const toPttTalker = (wire: WirePttTalker): PttTalker => ({
   isAdmin: wire.is_admin,
   local: wire.local,
   source: wire.source,
+  hops: wire.hops ?? null,
 });
 
 /** Every setting's wire name: one table both ways, so a field cannot be forgotten in one direction. */

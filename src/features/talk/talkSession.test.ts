@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { PttTalker } from '@/api';
 import { createTalkSession, PREROLL_FRAMES, type TalkSnapshot } from './talkSession';
 
-const ADMIN: PttTalker = { id: 'a'.repeat(32), codename: 'emuadmin', isAdmin: true, local: false, source: null };
+const ADMIN: PttTalker = { id: 'a'.repeat(32), codename: 'emuadmin', isAdmin: true, local: false, source: null, hops: 1 };
 
 function setup() {
   const sent: Array<string | number> = [];

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router';
 import { Puzzle } from 'lucide-react';
-import { PAGES, pluginPagePath } from '@/app/pages';
-import { useDevice, usePlugins } from '@/data/queries';
+import { pluginPagePath, shownPages } from '@/app/pages';
+import { useDevice, usePlugins, useUiPages } from '@/data/queries';
 import { formatDuration, shortHash } from '@/lib/format';
 import { KeyValues, Skeleton } from '@/ui';
 import styles from './Sidebar.module.css';
@@ -9,11 +9,12 @@ import styles from './Sidebar.module.css';
 const linkClass = ({ isActive }: { isActive: boolean }) => (isActive ? `${styles.link} ${styles.active}` : styles.link);
 
 export function Sidebar() {
+  const pages = shownPages(useUiPages().data);
   return (
     <div className={styles.sidebar}>
       <nav className={styles.nav} aria-label="Main">
         <ul>
-          {PAGES.map(({ path, label, icon: Icon, hasSubpages }) => (
+          {pages.map(({ path, label, icon: Icon, hasSubpages }) => (
             <li key={path}>
               <NavLink to={`/${path}`} end={!hasSubpages} className={linkClass}>
                 <Icon aria-hidden />

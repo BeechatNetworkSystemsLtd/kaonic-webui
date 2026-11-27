@@ -44,7 +44,7 @@ import {
   toVpnGateway,
   toVpnUplink,
 } from './convert';
-import { toBootImage, toBootJob, toBootStaged, toBootState, type WireBootImage, type WireBootStaged, type WireBootJob, type WireBootState } from './boot';
+import { toBootImage, toBootJob, toBootStaged, toBootState, toOsJob, toOsState, type WireBootImage, type WireBootStaged, type WireBootJob, type WireBootState, type WireOsState } from './boot';
 import { createEventStream, type EventStream } from './events';
 import { createPttAudioSocket } from './pttAudio';
 import { createRemoteShell } from './remoteShell';
@@ -393,8 +393,22 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
           }),
         ),
       bootJob: async (id) => toBootJob(await get<WireBootJob>(path`/jobs/${id}`)),
+      os: async () => toOsState(await get<WireOsState>('/system/os')),
+      uploadOs: async (file, onProgress) => {
+        if (!transport.csrfToken()) await authState();
+        return toOsJob(await transport.upload<WireBootJob>('/system/os/upload', file, onProgress));
+      },
+      discardOs: async () => {
+        await write<void>('DELETE', '/system/os/upload');
+      },
+      installOs: async (password) => toOsJob(await write<WireBootJob>('POST', '/system/os/install', { password })),
+      osJob: async (id) => toOsJob(await get<WireBootJob>(path`/jobs/${id}`)),
     },
 
+    ui: {
+      pages: async () => (await get<{ shown: string[] | null }>('/ui/pages')).shown,
+      setPages: async (shown) => (await write<{ shown: string[] | null }>('PUT', '/ui/pages', { shown })).shown,
+    },
     network: {
       get: async () => toNetwork(await get<WireNetworkState>('/network')),
       setSource: async (id, enabled) => toNetwork(await write<WireNetworkState>('PATCH', '/network', { sources: { [id]: enabled } } satisfies WireNetworkPatch)),

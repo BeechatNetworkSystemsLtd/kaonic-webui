@@ -17,7 +17,29 @@ export interface TalkTile {
   talking: boolean;
   /** When it last talked (Unix ms), as far as this page has seen. */
   lastTalkedTs: number | null;
+  /** Hops to the node (1: a neighbour); null for this device or an unknown path. */
+  hops: number | null;
+  /** The signal last heard from it, dBm; null when not heard directly. */
+  rssi: number | null;
 }
+
+export interface SignalQuality {
+  /** 0..4 bars. */
+  bars: number;
+  label: 'Excellent' | 'Good' | 'Fair' | 'Weak' | 'Poor';
+}
+
+/** A signal in words and bars. The radio hears down to about −110 dBm; links are steady from about −95. */
+export function signalQuality(rssi: number): SignalQuality {
+  if (rssi >= -70) return { bars: 4, label: 'Excellent' };
+  if (rssi >= -85) return { bars: 3, label: 'Good' };
+  if (rssi >= -95) return { bars: 2, label: 'Fair' };
+  if (rssi >= -105) return { bars: 1, label: 'Weak' };
+  return { bars: 0, label: 'Poor' };
+}
+
+/** Hops in words: a neighbour is direct. */
+export const hopsText = (hops: number) => (hops <= 1 ? 'Direct' : `${hops} hops`);
 
 /** What a voice packet knows of a talker: the first 4 bytes of its identity hash, as hex. */
 export const talkerPrefix = (id: string) => id.slice(0, 8).toLowerCase();
@@ -52,6 +74,8 @@ export function talkTiles(peers: readonly Peer[], self: SelfNode | null, talker:
       self: false,
       talking: onAir !== null && talkerPrefix(peer.id) === onAir,
       lastTalkedTs: talked.get(talkerPrefix(peer.id)) ?? null,
+      hops: peer.hops,
+      rssi: peer.rssi,
     }))
     .sort((a, b) => Number(b.isAdmin) - Number(a.isAdmin) || a.codename.localeCompare(b.codename));
   if (!self) return ours;
@@ -63,6 +87,29 @@ export function talkTiles(peers: readonly Peer[], self: SelfNode | null, talker:
     self: true,
     talking: talker?.local === true,
     lastTalkedTs: talked.get(talkerPrefix(self.id)) ?? null,
+    hops: null,
+    rssi: null,
   };
   return [you, ...ours];
+}
+
+/** A reading of the hub's packet counters. */
+export interface PacketSample {
+  ts: number;
+  rx: number;
+  tx: number;
+}
+
+/** How long back a packet rate looks. */
+export const RATE_WINDOW_MS = 5000;
+
+/** Packets per second received and sent over the last `RATE_WINDOW_MS`; 0 with nothing to compare. */
+export function packetRates(samples: readonly PacketSample[], now: number): { rx: number; tx: number } {
+  const recent = samples.filter((sample) => now - sample.ts <= RATE_WINDOW_MS);
+  const first = recent[0];
+  const last = recent.at(-1);
+  if (!first || !last || last === first) return { rx: 0, tx: 0 };
+  // Counted up to now: a stream that stopped falls back to 0.
+  const seconds = Math.max(1, now - first.ts) / 1000;
+  return { rx: Math.max(0, last.rx - first.rx) / seconds, tx: Math.max(0, last.tx - first.tx) / seconds };
 }

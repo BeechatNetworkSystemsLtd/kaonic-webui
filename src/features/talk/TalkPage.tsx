@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RadioTower } from 'lucide-react';
+import { RadioTower, Settings, Volume2 } from 'lucide-react';
 import type { PttState, PttTalker } from '@/api';
-import { useAuthState, useDevice, useHubStream, usePeers, usePtt } from '@/data/queries';
+import { useAuthState, useHubStream, usePeers, usePtt } from '@/data/queries';
 import { formatClock } from '@/lib/format';
 import { Page } from '@/shell/Page';
-import { Badge, LoadError, Notice, Panel, Skeleton, Switch } from '@/ui';
+import { Button, Dialog, LoadError, Notice, Skeleton, Switch } from '@/ui';
 import { createHold } from './hold';
-import { lastTalked, talkTiles, type TalkTile } from './nodeGrid';
+import { hopsText, lastTalked, packetRates, RATE_WINDOW_MS, signalQuality, talkTiles, type PacketSample, type TalkTile } from './nodeGrid';
 import { PttSettingsPanel } from './PttSettingsPanel';
-import { Spectrum } from './LevelBars';
+import { LevelArc } from './LevelArc';
 import { useTalk, type Talk } from './useTalk';
 import styles from './TalkPage.module.css';
 
@@ -17,18 +17,16 @@ export default function TalkPage() {
   const ptt = usePtt();
   const auth = useAuthState();
   const canChange = auth.data?.role === 'admin';
+  const [settings, setSettings] = useState(false);
 
   return (
-    <Page
-      title="Talk"
-      description="Push to talk to every node of the network at once. Each node plays it, and relays it to the nodes further away."
-    >
+    <Page title="Talk" fill bare>
       {ptt.isPending ? (
         <Skeleton lines={6} />
       ) : ptt.isError ? (
         <LoadError error={ptt.error} onRetry={() => void ptt.refetch()} />
       ) : (
-        <TalkContent state={ptt.data} canChange={canChange} />
+        <TalkContent state={ptt.data} canChange={canChange} settingsOpen={settings} onOpenSettings={() => setSettings(true)} onCloseSettings={() => setSettings(false)} />
       )}
     </Page>
   );
@@ -45,7 +43,19 @@ function unavailable(state: PttState, canChange: boolean): string | null {
   return null;
 }
 
-function TalkContent({ state, canChange }: { state: PttState; canChange: boolean }) {
+function TalkContent({
+  state,
+  canChange,
+  settingsOpen,
+  onOpenSettings,
+  onCloseSettings,
+}: {
+  state: PttState;
+  canChange: boolean;
+  settingsOpen: boolean;
+  onOpenSettings: () => void;
+  onCloseSettings: () => void;
+}) {
   // Without a microphone on the device, the button can only use the browser's.
   const input = state.audio.device ? state.settings.talkInput : 'browser';
   const talk = useTalk(input);
@@ -60,9 +70,28 @@ function TalkContent({ state, canChange }: { state: PttState; canChange: boolean
     <>
       {blocked ? <Notice tone={state.status === 'running' ? 'neutral' : 'warn'}>{blocked}</Notice> : null}
       {!state.audio.device && state.status === 'running' ? <Notice>No microphone or speaker on this device: talk and listen from this browser.</Notice> : null}
-      <TalkPanel state={state} talk={talk} hubLevel={hubLevel} disabled={blocked !== null || (input === 'browser' && talk.connection === 'closed')} />
-      <NodeGrid state={state} talker={talk.connection === 'open' ? talk.talker : state.floor.talker} />
-      <PttSettingsPanel state={state} canChange={canChange} inputLevel={inputLevel} />
+      {/* Users above and the button at the bottom; side by side on a phone held sideways. */}
+      <div className={styles.layout}>
+        <section className={styles.console} aria-label="Users">
+          <NodeGrid state={state} talker={talk.connection === 'open' ? talk.talker : state.floor.talker} />
+        </section>
+        <TalkPanel
+          state={state}
+          talk={talk}
+          hubLevel={hubLevel}
+          disabled={blocked !== null || (input === 'browser' && talk.connection === 'closed')}
+          onSettings={onOpenSettings}
+        />
+      </div>
+      {settingsOpen ? (
+        <Dialog title="Talk settings" wide onClose={onCloseSettings}>
+          <label className={styles.listen}>
+            <Switch label="Listen in this browser" checked={talk.listening} onChange={(on) => void talk.setListening(on)} />
+            <span>Listen in this browser</span>
+          </label>
+          <PttSettingsPanel state={state} canChange={canChange} inputLevel={inputLevel} />
+        </Dialog>
+      ) : null}
     </>
   );
 }
@@ -76,15 +105,7 @@ const PHASE_TEXT = {
   busy: 'Channel busy',
 } as const;
 
-const SOURCE_TEXT: Record<NonNullable<PttTalker['source']>, string> = {
-  device: 'device mic',
-  browser: 'browser mic',
-  udp: 'app',
-  squelch: 'hardware PTT',
-  test: 'test',
-};
-
-function TalkPanel({ state, talk, hubLevel, disabled }: { state: PttState; talk: Talk; hubLevel: number; disabled: boolean }) {
+function TalkPanel({ state, talk, hubLevel, disabled, onSettings }: { state: PttState; talk: Talk; hubLevel: number; disabled: boolean; onSettings: () => void }) {
   const { press, release } = talk;
   const hold = useMemo(() => createHold({ press, release }), [press, release]);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -121,7 +142,7 @@ function TalkPanel({ state, talk, hubLevel, disabled }: { state: PttState; talk:
     if (disabled) hold.cancel();
   }, [disabled, hold]);
 
-  const { phase, busyWith, cutOff } = talk.snapshot;
+  const { phase } = talk.snapshot;
   // The socket says first; the state from the events stream covers the rest.
   const talker = talk.connection === 'open' ? talk.talker : state.floor.talker;
   const browserTalking = phase === 'keyed' && talk.input === 'browser';
@@ -129,10 +150,14 @@ function TalkPanel({ state, talk, hubLevel, disabled }: { state: PttState; talk:
   const tone = talker?.local ? 'tx' : talker ? 'rx' : 'idle';
 
   return (
-    <Panel title="Talk to all" actions={<ConnectionBadge state={talk.connection} />}>
-      <div className={styles.talk}>
-        <div className={styles.buttonColumn}>
-          {state.settings.spectrumEnabled ? <Spectrum bands={state.settings.spectrumBands} analyser={talk.analyser} level={level} tone={tone} /> : null}
+    <section className={styles.deck} data-tone={tone} aria-label="Push to talk">
+      <Button className={styles.deckSettings} variant="ghost" size="small" iconOnly aria-label="Talk settings" title="Talk settings" onClick={onSettings}>
+        <Settings />
+      </Button>
+      <div className={styles.buttonColumn}>
+        <OnAir talker={talker} />
+        <div className={styles.ring}>
+          {state.settings.spectrumEnabled ? <LevelArc analyser={talk.analyser} level={level} tone={tone} /> : null}
           <button
             ref={buttonRef}
             type="button"
@@ -140,7 +165,7 @@ function TalkPanel({ state, talk, hubLevel, disabled }: { state: PttState; talk:
             data-phase={phase}
             className={styles.talkButton}
             aria-pressed={phase === 'keyed' || phase === 'waiting'}
-            aria-describedby="talk-help"
+            title="Hold to talk, or hold the space bar"
             disabled={disabled}
             onPointerDown={(event) => {
               if (event.button !== 0) return;
@@ -158,37 +183,10 @@ function TalkPanel({ state, talk, hubLevel, disabled }: { state: PttState; talk:
             <MicGlyph />
             <span className={styles.talkLabel}>{PHASE_TEXT[phase]}</span>
           </button>
-          <p className={styles.micUsed}>
-            {talk.input === 'device' ? 'Talks from the device’s microphone' : 'Talks from this browser’s microphone'}
-          </p>
-          <p id="talk-help" className={styles.help}>
-            {phase === 'busy'
-              ? busyWith
-                ? `${busyWith.codename} is talking. Let go and try again when they stop.`
-                : 'The floor is taken. Let go and try again in a moment.'
-              : cutOff === 'preempted'
-                ? 'The Kaonic Admin took the floor.'
-                : cutOff === 'timeout'
-                  ? 'The talk was cut off: the connection to the device dropped.'
-                  : cutOff === 'forbidden'
-                    ? 'Only the device’s admin can talk from this page.'
-                    : state.self.isAdmin
-                      ? 'Hold the button, or the space bar. This is the Kaonic Admin device: you talk with priority, and take the floor from anyone talking.'
-                      : 'Hold the button, or the space bar. The floor must be free; the Kaonic Admin’s talk takes it from anyone.'}
-          </p>
-          <Switch label="Listen here" checked={talk.listening} onChange={(on) => void talk.setListening(on)} />
-          {talk.problem ? <Notice tone="warn">{talk.problem}</Notice> : null}
         </div>
-        <OnAir talker={talker} since={state.floor.sinceTs} level={level} />
       </div>
-    </Panel>
+    </section>
   );
-}
-
-function ConnectionBadge({ state }: { state: Talk['connection'] }) {
-  if (state === 'open') return <Badge tone="ok">Connected</Badge>;
-  if (state === 'connecting') return <Badge tone="warn">Connecting</Badge>;
-  return <Badge tone="danger">Signed out</Badge>;
 }
 
 function MicGlyph() {
@@ -200,74 +198,106 @@ function MicGlyph() {
   );
 }
 
-/** Seconds since `since`, ticking while it is set. */
-function useSecondsSince(since: number | null): number | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (since === null) return;
-    const timer = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(timer);
-  }, [since]);
-  return since === null ? null : Math.max(0, Math.floor((now - since) / 1000));
-}
-
-function TalkerBadges({ talker }: { talker: PttTalker }) {
+/** Who is talking, above the button. */
+function OnAir({ talker }: { talker: PttTalker | null }) {
   return (
-    <>
-      {talker.isAdmin ? <Badge tone="accent">Admin</Badge> : null}
-      {talker.local ? <Badge>This device{talker.source ? ` · ${SOURCE_TEXT[talker.source]}` : ''}</Badge> : null}
-    </>
-  );
-}
-
-function OnAir({ talker, since, level }: { talker: PttTalker | null; since: number | null; level: number }) {
-  const seconds = useSecondsSince(talker ? since : null);
-  const percent = Math.round(Math.min(1, Math.max(0, level)) * 100);
-  return (
-    <section className={styles.onAir} aria-labelledby="on-air-title">
-      <h2 id="on-air-title" className={styles.subtitle}>
-        On air now
-      </h2>
+    <section className={styles.onAir} aria-label="On air">
       <p className="visually-hidden" aria-live="polite">
-        {talker ? `${talker.codename} is talking` : 'Nobody is talking'}
+        {talker
+          ? `${talker.codename} is talking${!talker.local && talker.hops !== null ? `, ${hopsText(talker.hops + 1).toLowerCase()}` : ''}`
+          : 'Nobody is talking'}
       </p>
       {talker ? (
-        <div className={styles.talker}>
-          <span className={styles.codename}>{talker.codename}</span>
-          <span className={styles.badges}>
-            <TalkerBadges talker={talker} />
-          </span>
-          <span className={`${styles.muted} num`}>{seconds !== null ? `${seconds} s` : ''}</span>
+        <div className={styles.talkerBlock}>
+          <div className={styles.talker}>
+            <span className={styles.codename}>{talker.codename || talker.id.slice(0, 8)}</span>
+          </div>
+          {/* A talker not in the peer table is known by its first 4 bytes only. */}
+          <span className={`${styles.talkerId} mono`}>{/^[0-9a-f]{8}0{24}$/.test(talker.id) ? `${talker.id.slice(0, 8)}…` : talker.id}</span>
         </div>
       ) : (
-        <p className={styles.muted}>Nobody is talking.</p>
+        <p className={styles.muted}>Nobody is talking</p>
       )}
-      <div className={styles.level} role="meter" aria-label="Loudness" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-        <div className={styles.levelFill} style={{ width: `${percent}%` }} />
-      </div>
     </section>
   );
 }
 
 /* ── who is on the network ── */
 
-function tileLabel(tile: TalkTile) {
-  const who = `${tile.self ? 'You' : tile.codename}${tile.isAdmin ? ', Kaonic Admin' : ''}${tile.online ? '' : ', out of range'}`;
-  const when = tile.talking ? 'talking now' : tile.lastTalkedTs ? `last talked ${formatClock(tile.lastTalkedTs).slice(0, 8)}` : 'has not talked';
-  return `${who}: ${when}`;
+/** Signal bars and the RSSI, as heard from the node itself. */
+function Signal({ rssi }: { rssi: number }) {
+  const quality = signalQuality(rssi);
+  return (
+    <span className={styles.signal} data-bars={quality.bars} title={`${quality.label} signal`}>
+      <span className={styles.signalBars} aria-hidden="true">
+        {[1, 2, 3, 4].map((bar) => (
+          <span key={bar} data-on={bar <= quality.bars || undefined} />
+        ))}
+      </span>
+      <span className="num">{rssi} dBm</span>
+    </span>
+  );
 }
 
-/** Every node of our network as a tile; the one on air lights up. Audio is never recorded. */
+function tileLabel(tile: TalkTile) {
+  const who = `${tile.self ? 'You' : tile.codename}${tile.isAdmin ? ', Kaonic Admin' : ''}${tile.online ? '' : ', out of range'}`;
+  const where = `${tile.hops !== null ? `, ${hopsText(tile.hops).toLowerCase()}` : ''}${tile.rssi !== null ? `, signal ${signalQuality(tile.rssi).label.toLowerCase()} (${tile.rssi} dBm)` : ''}`;
+  const when = tile.talking ? 'talking now' : tile.lastTalkedTs ? `last talked ${formatClock(tile.lastTalkedTs).slice(0, 8)}` : 'has not talked';
+  return `${who}${where}: ${when}`;
+}
+
+/** Codec bitrate, live packet rates and the counters since the hub started. Audio is never recorded. */
+function AudioStats({ state, onAir }: { state: PttState; onAir: boolean }) {
+  const samples = useRef<PacketSample[]>([]);
+  const [rates, setRates] = useState({ rx: 0, tx: 0 });
+  const { rxPackets, txPackets } = state.stats;
+  useEffect(() => {
+    const ts = Date.now();
+    const kept = samples.current.filter((sample) => ts - sample.ts <= RATE_WINDOW_MS * 2);
+    kept.push({ ts, rx: rxPackets, tx: txPackets });
+    samples.current = kept;
+  }, [rxPackets, txPackets]);
+  // Once a second, so a rate also falls back to 0 once packets stop.
+  useEffect(() => {
+    const timer = setInterval(() => setRates(packetRates(samples.current, Date.now())), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const items: Array<[string, string]> = [
+    ['Bitrate', onAir ? `${(state.settings.opusBitrateBps / 1000).toFixed(0)} kbps` : '0 kbps'],
+    ['RX', `${rates.rx.toFixed(1)} pkt/s`],
+    ['TX', `${rates.tx.toFixed(1)} pkt/s`],
+    ['Received', state.stats.rxPackets.toLocaleString()],
+    ['Sent', state.stats.txPackets.toLocaleString()],
+    ['Relayed', state.stats.relayed.toLocaleString()],
+    ['Duplicates', state.stats.duplicates.toLocaleString()],
+  ];
+  return (
+    <dl className={styles.audioStats} aria-label="Audio statistics" title="Audio is never recorded.">
+      {items.map(([label, value]) => (
+        <div key={label} className={styles.audioStat}>
+          <dt>{label}</dt>
+          <dd className="num">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The other users of our network as tiles; the one on air lights up. */
 function NodeGrid({ state, talker }: { state: PttState; talker: PttTalker | null }) {
   const peers = usePeers().data ?? [];
-  const device = useDevice().data;
   // The hub keeps the last bursts; the current talker counts from when it took the floor.
   const talked = lastTalked(new Map(), state.recent, talker, state.floor.sinceTs ?? 0);
-  const self = { id: state.self.id, codename: device?.codename ?? '', isAdmin: state.self.isAdmin };
-  const tiles = talkTiles(peers, self, talker, talked);
+  const tiles = talkTiles(peers, null, talker, talked);
   return (
-    <Panel title="Network" actions={<span className={`${styles.muted} num`}>{tiles.length} {tiles.length === 1 ? 'node' : 'nodes'}</span>}>
-      <ul className={styles.nodeGrid} aria-label="Nodes of the network">
+    <div className={styles.network}>
+      <div className={styles.networkHead}>
+        <h2 className={styles.subtitle}>Users</h2>
+        <span className={`${styles.muted} num`}>
+          {tiles.length} {tiles.length === 1 ? 'user' : 'users'}
+        </span>
+      </div>
+      <ul className={styles.nodeGrid} aria-label="Users of the network">
         {tiles.map((tile) => (
           <li
             key={tile.id}
@@ -278,14 +308,15 @@ function NodeGrid({ state, talker }: { state: PttState; talker: PttTalker | null
             title={tileLabel(tile)}
             aria-label={tileLabel(tile)}
           >
-            <RadioTower className={styles.nodeIcon} aria-hidden="true" />
+            {tile.talking ? <Volume2 className={styles.nodeIcon} aria-hidden="true" /> : <RadioTower className={styles.nodeIcon} aria-hidden="true" />}
             <span className={styles.nodeName}>{tile.self ? 'you' : tile.codename}</span>
-            <span className={`${styles.nodeId} num`}>{tile.id.slice(0, 8)}</span>
+            <span className={`${styles.nodeId} num`}>{tile.hops !== null ? hopsText(tile.hops) : tile.id.slice(0, 8)}</span>
+            {tile.rssi !== null ? <Signal rssi={tile.rssi} /> : null}
             {tile.isAdmin ? <span className={styles.nodeAdmin}>ADMIN</span> : null}
           </li>
         ))}
       </ul>
-      <p className={styles.footnote}>Audio is never recorded.</p>
-    </Panel>
+      <AudioStats state={state} onAir={talker !== null} />
+    </div>
   );
 }

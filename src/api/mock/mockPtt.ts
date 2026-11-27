@@ -146,7 +146,7 @@ export function createMockPtt(deps: MockPttDeps): { api: MockPttApi; sync(): voi
 
   function selfTalker(source: PttSource): PttTalker {
     const self = deps.self();
-    return { id: self.id, codename: self.codename, isAdmin: self.isAdmin, local: true, source };
+    return { id: self.id, codename: self.codename, isAdmin: self.isAdmin, local: true, source, hops: null };
   }
 
   function state(): PttState {
@@ -271,7 +271,7 @@ export function createMockPtt(deps: MockPttDeps): { api: MockPttApi; sync(): voi
         const peer = talkers[Math.floor(Math.random() * talkers.length)];
         if (peer) {
           startSpeech({
-            talker: { id: peer.id, codename: peer.codename, isAdmin: peer.trust.isAdmin, local: false, source: null },
+            talker: { id: peer.id, codename: peer.codename, isAdmin: peer.trust.isAdmin, local: false, source: null, hops: peer.hops === null ? null : Math.max(0, peer.hops - 1) },
             startedTs: now,
             frames: null,
             endsTs: now + 1500 + Math.random() * 4500,
@@ -309,7 +309,7 @@ export function createMockPtt(deps: MockPttDeps): { api: MockPttApi; sync(): voi
         if (local || speech) return;
         const now = Date.now();
         startSpeech({
-          talker: { id: 'echo', codename: 'emuecho1', isAdmin: false, local: false, source: null },
+          talker: { id: 'echo', codename: 'emuecho1', isAdmin: false, local: false, source: null, hops: 0 },
           startedTs: now,
           frames: echo,
           endsTs: now + echo.length * FRAME_MS,

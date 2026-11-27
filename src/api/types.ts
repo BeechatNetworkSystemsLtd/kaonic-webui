@@ -62,7 +62,8 @@ export interface Device {
   model: string;
   /** 32 lowercase hex characters. */
   identityHash: string;
-  versions: { hub: string; os: string; webui: string | null };
+  /** `image` is the Kaonic system image version; null when the image does not record it. */
+  versions: { hub: string; os: string; image: string | null; webui: string | null };
   uptimeSecs: number;
   radioModules: number;
   /** This device is the Kaonic Admin of its network. */
@@ -952,6 +953,8 @@ export interface PttTalker {
   local: boolean;
   /** For local talk: where it comes from. Null for a remote talker. */
   source: PttSource | null;
+  /** Relays the talk comes through (0: straight from the talker); null for our own. */
+  hops: number | null;
 }
 
 /** One stretch of talk, after the fact. Audio is never recorded. */
@@ -1196,6 +1199,43 @@ export interface KernelInstallResult {
   kernelFile: string | null;
   dtbFile: string | null;
   modulesPresent: boolean | null;
+}
+
+/** An uploaded OS update, from upload to installed. */
+export interface OsUpdate {
+  state: 'uploading' | 'checking' | 'ready' | 'invalid' | 'installing' | 'installed';
+  size: number;
+  uploadedTs: number;
+  /** The check or install job while one runs. */
+  jobId: string | null;
+  /** From the image's manifest, once checked. */
+  version: string | null;
+  built: string | null;
+  /** The image against the running one. */
+  compared: 'newer' | 'same' | 'older' | null;
+  /** Why the image was refused. */
+  error: string | null;
+  /** The slot it goes, or went, into. */
+  slot: BootSlotId | null;
+}
+
+export interface OsState {
+  /** The Kaonic system image version; null when the running image does not record it. */
+  version: string | null;
+  /** The base OS version. */
+  os: string;
+  machine: string | null;
+  slot: BootSlotId | null;
+  update: OsUpdate | null;
+}
+
+export interface OsJob {
+  id: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  /** 0..1 */
+  progress: number;
+  detail: string | null;
+  error: string | null;
 }
 
 export interface BootJob {

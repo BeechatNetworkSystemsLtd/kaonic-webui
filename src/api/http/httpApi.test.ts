@@ -375,7 +375,7 @@ describe('model mapping', () => {
       },
     });
     const ptt = await api.ptt.get();
-    expect(ptt.floor).toEqual({ state: 'receiving', talker: { id: 'ab'.repeat(16), codename: 'emuadmin', isAdmin: true, local: false, source: null }, sinceTs: 1000, level: 0.4 });
+    expect(ptt.floor).toEqual({ state: 'receiving', talker: { id: 'ab'.repeat(16), codename: 'emuadmin', isAdmin: true, local: false, source: null, hops: null }, sinceTs: 1000, level: 0.4 });
     expect(ptt.recent[0]).toMatchObject({ startedTs: 900, durationMs: 2100, lostFrames: 3, hops: 2, ended: 'preempted' });
     expect(ptt.self).toEqual({ id: 'cd'.repeat(16), isAdmin: true });
     expect(ptt.settings).toMatchObject({ volume: null, micGain: 60, playbackDevice: 'hw:0,0', talkInput: 'device', squelchPrerollMs: 120, opusBitrateBps: 20000, packetAlignLdpc: true, spectrumBands: 14 });

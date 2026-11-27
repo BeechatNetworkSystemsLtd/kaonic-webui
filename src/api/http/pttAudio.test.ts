@@ -93,8 +93,8 @@ describe('push-to-talk audio socket', () => {
   it('converts the talker from the wire', () => {
     const { messages } = open();
     last().onopen?.();
-    last().text({ type: 'talker', talker: { id: 'ab', codename: 'emunode1', is_admin: false, local: false, source: null } });
-    expect(messages).toEqual([{ type: 'talker', talker: { id: 'ab', codename: 'emunode1', isAdmin: false, local: false, source: null } }]);
+    last().text({ type: 'talker', talker: { id: 'ab', codename: 'emunode1', is_admin: false, local: false, source: null, hops: 2 } });
+    expect(messages).toEqual([{ type: 'talker', talker: { id: 'ab', codename: 'emunode1', isAdmin: false, local: false, source: null, hops: 2 } }]);
   });
 
   it('reconnects after a drop, telling a talker it was cut off', () => {

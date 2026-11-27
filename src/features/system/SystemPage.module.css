@@ -91,3 +91,23 @@
   height: 1px;
   opacity: 0;
 }
+.pageList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s2) var(--s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pageRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) 0;
+}
+.pageIcon {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}

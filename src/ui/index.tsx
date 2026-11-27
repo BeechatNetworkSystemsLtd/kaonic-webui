@@ -192,6 +192,8 @@ export function Segmented<T extends string | number>({ label, options, value, on
 interface DialogProps {
   title: string;
   onClose: () => void;
+  /** Room for a long form (settings). */
+  wide?: boolean;
   children: ReactNode;
 }
 
@@ -201,7 +203,7 @@ interface DialogProps {
  * It is the browser's own `<dialog>`: focus stays inside, Escape closes it,
  * and the rest of the page cannot be reached while it is open.
  */
-export function Dialog({ title, onClose, children }: DialogProps) {
+export function Dialog({ title, onClose, wide, children }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -216,6 +218,7 @@ export function Dialog({ title, onClose, children }: DialogProps) {
     <dialog
       ref={dialog}
       className={styles.dialog}
+      data-wide={wide || undefined}
       aria-labelledby={titleId}
       // Escape asks the dialog to close; let the owner decide, so its state stays the single truth.
       onCancel={(event) => {

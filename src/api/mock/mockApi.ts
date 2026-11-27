@@ -1,4 +1,5 @@
 import { createMockBoot } from './mockBoot';
+import { createMockOs } from './mockOs';
 import { createMockCapture } from './mockVpnCapture';
 import type { ConnectionState, HubApi } from '../client';
 import { ApiError } from '../errors';
@@ -99,6 +100,8 @@ export interface MockOptions {
 const MOCK_SERIAL = 'K1S-30-004217';
 
 interface Persisted {
+  /** The menu's pages, as the admin saved them. */
+  pages?: string[] | null;
   /** Null: the UI opens without a password. */
   password: string | null;
   codename: string;
@@ -1005,6 +1008,9 @@ export function createMockApi(options: MockOptions = {}): HubApi {
   const boot = createMockBoot((password) => {
     if (persisted?.password != null && password !== persisted.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
   });
+  const os = createMockOs((password) => {
+    if (persisted?.password != null && password !== persisted.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
+  });
   const vpnCapture = createMockCapture('10.20.1.1', '10.20.0.0/16', () =>
     peers.filter((peer) => peer.online && peer.list === 'whitelist' && peer.tunnelIp).map((peer) => ({ id: peer.id, codename: peer.codename, ip: peer.tunnelIp! })),
   );
@@ -1248,12 +1254,12 @@ export function createMockApi(options: MockOptions = {}): HubApi {
         hostname: `kaonic-${persisted!.codename.slice(-4)}`,
         model: 'Kaonic 1S r30',
         identityHash: persisted!.identityHash ?? bootIdentity(),
-        versions: { hub: installer.hubVersion(), os: 'kaonic-os 2026.09', webui: '0.1.0' },
+        versions: { hub: installer.hubVersion(), os: 'kaonic-os 2026.09', image: '0.3.3', webui: '0.1.0' },
         uptimeSecs: uptimeSecs(),
         radioModules: 2,
         isAdmin: (persisted!.mode ?? 'admin') === 'admin',
       })),
-      reboot: authed(() => undefined),
+      reboot: authed(() => void setTimeout(() => os.rebooted(), 3000)),
       factoryReset: authed((password: string) => {
         // A wrong password here is a mistake in a form, not a lost session.
         if (persisted!.password !== null && password !== persisted!.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
@@ -1303,8 +1309,24 @@ export function createMockApi(options: MockOptions = {}): HubApi {
       discardStagedBoot: authed(() => boot.discard()),
       installKernel: authed((options: KernelInstallOptions) => boot.install(options)),
       bootJob: authed((id: string) => boot.job(id)),
+      os: authed(() => os.state()),
+      uploadOs: async (file: Blob, onProgress: (fraction: number) => void) => {
+        await wait();
+        if (!persisted?.loggedIn) throw new ApiError('unauthenticated', 'Sign in to continue.');
+        return os.upload(file, onProgress);
+      },
+      discardOs: authed(() => os.discard()),
+      installOs: authed((password: string) => os.install(password)),
+      osJob: authed((id: string) => os.job(id)),
     },
 
+    ui: {
+      pages: authed(() => persisted?.pages ?? null),
+      setPages: authed((shown: string[] | null) => {
+        save({ ...persisted!, pages: shown });
+        return shown;
+      }),
+    },
     network: {
       get: authed(networkState),
       setSource: authed((id: SourceId, enabled: boolean) => {

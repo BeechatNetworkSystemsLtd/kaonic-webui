@@ -55,7 +55,10 @@ export const keys = {
   services: ['services'] as const,
   boot: ['boot'] as const,
   bootStaged: ['boot', 'staged'] as const,
-  bootJob: (id: string) => ['boot', 'job', id] as const,
+  bootJob: (id: string) => ['bootJob', id] as const,
+  os: ['os'] as const,
+  uiPages: ['ui', 'pages'] as const,
+  osJob: (id: string) => ['osJob', id] as const,
   network: ['network'] as const,
   wifi: ['wifi'] as const,
   wifiScan: ['wifi-scan'] as const,
@@ -168,6 +171,68 @@ export function useUploadBootImage() {
 export function useDiscardStagedBoot() {
   const client = useQueryClient();
   return useMutation({ mutationFn: api.system.discardStagedBoot, onSuccess: () => client.invalidateQueries({ queryKey: keys.bootStaged }) });
+}
+
+/* ── the menu's pages ── */
+
+export const useUiPages = () => useQuery({ queryKey: keys.uiPages, queryFn: api.ui.pages, staleTime: 60_000 });
+
+export function useSetUiPages() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (shown: string[] | null) => api.ui.setPages(shown),
+    onMutate: (shown) => client.setQueryData(keys.uiPages, shown),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.uiPages }),
+  });
+}
+
+/* ── OS updates ── */
+
+/** The running image and any uploaded update; polled while the device works on one. */
+export const useOs = () =>
+  useQuery({
+    queryKey: keys.os,
+    queryFn: api.system.os,
+    refetchInterval: (query) => {
+      const state = query.state.data?.update?.state;
+      return state === 'checking' || state === 'installing' ? 1000 : false;
+    },
+  });
+
+export function useUploadOs() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, onProgress }: { file: Blob; onProgress: (fraction: number) => void }) => api.system.uploadOs(file, onProgress),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.os }),
+  });
+}
+
+export function useInstallOs() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: (password: string) => api.system.installOs(password), onSettled: () => client.invalidateQueries({ queryKey: keys.os }) });
+}
+
+export function useDiscardOs() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: api.system.discardOs, onSettled: () => client.invalidateQueries({ queryKey: keys.os }) });
+}
+
+/** A check or install job, polled until it ends; the OS state is read again then. */
+export function useOsJob(id: string | null) {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: keys.osJob(id ?? ''),
+    enabled: id !== null,
+    queryFn: async () => {
+      const job = await api.system.osJob(id!);
+      if (job.state === 'done' || job.state === 'failed') {
+        void client.invalidateQueries({ queryKey: keys.os });
+        void client.invalidateQueries({ queryKey: keys.boot });
+      }
+      return job;
+    },
+    refetchInterval: (query) => (query.state.data && (query.state.data.state === 'done' || query.state.data.state === 'failed') ? false : 700),
+  });
 }
 
 export const useInstallKernel = () => useMutation({ mutationFn: (options: KernelInstallOptions) => api.system.installKernel(options) });

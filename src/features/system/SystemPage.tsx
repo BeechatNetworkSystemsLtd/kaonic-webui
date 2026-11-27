@@ -4,8 +4,9 @@ import { useAuthState, useDevice, useFactoryReset, useMetrics, useReboot, useRes
 import { formatDuration, formatMegabytes } from '@/lib/format';
 import { Page, PanelGrid } from '@/shell/Page';
 import { Button, Field, Input, KeyValues, LoadError, Meter, Notice, Panel, Skeleton, Status } from '@/ui';
-import { BootPanel } from './BootPanel';
 import { SoftwarePanel } from './SoftwarePanel';
+import { OsPanel } from './UpdateOs';
+import { PagesPanel } from './PagesPanel';
 import styles from './SystemPage.module.css';
 
 export default function SystemPage() {
@@ -17,9 +18,10 @@ export default function SystemPage() {
         <HealthPanel />
         <ServicesPanel />
       </PanelGrid>
+      <OsPanel admin={admin} />
+      <PagesPanel admin={admin} />
       {admin ? <SoftwarePanel /> : null}
       <MaintenancePanel admin={admin} />
-      <BootPanel />
     </Page>
   );
 }
@@ -39,7 +41,6 @@ function DevicePanel() {
             ['Radio modules', device.data.radioModules],
             ['Uptime', formatDuration(device.data.uptimeSecs)],
             ['Hub', device.data.versions.hub],
-            ['System', device.data.versions.os],
             ['Web UI', device.data.versions.webui ?? '–'],
           ]}
         />

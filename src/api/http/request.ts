@@ -73,6 +73,8 @@ export interface Transport {
   request<T>(method: string, path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<T>;
   /** A GET whose answer is a file, not JSON. */
   download(path: string): Promise<Blob>;
+  /** POSTs a file as the raw body, reporting how much is sent. Uploads have no time limit. */
+  upload<T>(path: string, file: Blob, onProgress: (fraction: number) => void): Promise<T>;
   /** The CSRF token of the current session, sent with every write. Null drops it. */
   setCsrfToken(token: string | null): void;
   csrfToken(): string | null;
@@ -100,6 +102,32 @@ export function createTransport(options: TransportOptions = {}): Transport {
       }
       if (!response.ok) throw await toApiError(response);
       return response.blob();
+    },
+
+    upload<T>(path: string, file: Blob, onProgress: (fraction: number) => void): Promise<T> {
+      // fetch cannot report upload progress; XMLHttpRequest can.
+      return new Promise<T>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', baseUrl + path);
+        xhr.setRequestHeader('Accept', 'application/json');
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        if (csrf) xhr.setRequestHeader(CSRF_HEADER, csrf);
+        xhr.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total);
+        xhr.onerror = () => reject(new ApiError('network', 'The upload stopped: the device cannot be reached. Check that you are still connected to it.'));
+        xhr.onload = () => {
+          const response = new Response(xhr.responseText || null, { status: xhr.status, headers: { 'Content-Type': 'application/json' } });
+          if (xhr.status < 200 || xhr.status >= 300) {
+            void toApiError(response).then(reject);
+            return;
+          }
+          try {
+            resolve((xhr.responseText ? JSON.parse(xhr.responseText) : undefined) as T);
+          } catch {
+            reject(new ApiError('internal', 'The device sent an answer this page cannot read.'));
+          }
+        };
+        xhr.send(file);
+      });
     },
 
     setCsrfToken: (token) => void (csrf = token),

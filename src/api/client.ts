@@ -6,6 +6,8 @@ import type {
   BandId,
   BootImage,
   BootJob,
+  OsJob,
+  OsState,
   BootMode,
   BootSlotId,
   BootStaged,
@@ -158,6 +160,20 @@ export interface HubApi {
     /** Installs the uploaded files into the slot that is not running; follow the job with `bootJob`. */
     installKernel(options: KernelInstallOptions): Promise<BootJob>;
     bootJob(id: string): Promise<BootJob>;
+    /** The running system image, and an update uploaded to the device, if any. */
+    os(): Promise<OsState>;
+    /** Uploads a release bundle (`image-…-emmc.tar.gz`); the device checks it in the job this returns. */
+    uploadOs(file: Blob, onProgress: (fraction: number) => void): Promise<OsJob>;
+    discardOs(): Promise<void>;
+    /** Writes the checked update into the slot that is not running; it boots from the next restart. Needs the password again, when one is set. */
+    installOs(password: string): Promise<OsJob>;
+    osJob(id: string): Promise<OsJob>;
+  };
+  ui: {
+    /** The page ids shown in the menu, as saved on the device; null until the admin chooses. */
+    pages(): Promise<string[] | null>;
+    /** Saves the menu for every browser; null goes back to the defaults. Admin only. */
+    setPages(shown: string[] | null): Promise<string[] | null>;
   };
   network: {
     get(): Promise<NetworkState>;
