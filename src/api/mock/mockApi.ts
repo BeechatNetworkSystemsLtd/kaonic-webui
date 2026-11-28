@@ -13,6 +13,7 @@ import type {
   HotspotConfig,
   KernelInstallOptions,
   BandId,
+  DeviceTime,
   HubTopic,
   MeshPacket,
   Modulation,
@@ -34,7 +35,7 @@ import type {
   RadioFrame,
   FrameKind,
   SetupMode,
-  SoftwareRelease,
+  UpdatePackage,
   SourceId,
   SystemMetrics,
   RemotePttSettings,
@@ -229,7 +230,7 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     if (config.modulation.kind === 'off' && band.usedBy.includes('mesh')) {
       throw new ApiError('validation_failed', 'The mesh runs on this band.', { modulation: 'The mesh band cannot be switched off.' });
     }
-    const maxPower = maxTxPower(config.modulation.kind);
+    const maxPower = maxTxPower(config.modulation, band.txPowerMax);
     if (config.txPower > maxPower) {
       throw new ApiError('validation_failed', 'Check the highlighted fields.', { txPower: `Use 0 to ${maxPower} with this modulation.` });
     }
@@ -301,7 +302,8 @@ export function createMockApi(options: MockOptions = {}): HubApi {
 
   /* ── managing other nodes ── */
 
-  const RELEASE: SoftwareRelease = { version: '1.0.1', sizeBytes: 6_400_000 };
+  /** Packages uploaded for nodes, by id. */
+  const updatePackages = new Map<string, UpdatePackage>();
   /** How long each kind of job takes on a node one hop away. Further nodes take longer. */
   const JOB_SECS: Record<NodeJob['kind'], number> = { update: 18, radio: 2, restart: 3, ptt: 1 };
   const JOB_TICK_MS = 500;
@@ -1005,6 +1007,9 @@ export function createMockApi(options: MockOptions = {}): HubApi {
     return vpnState().gateway;
   }
 
+  // The mock device's clock: a few hours off and not valid, like a board without a battery clock.
+  let clockOffsetMs = -3 * 3600 * 1000;
+  let clockValid = false;
   const boot = createMockBoot((password) => {
     if (persisted?.password != null && password !== persisted.password) throw new ApiError('validation_failed', 'Wrong password.', { password: 'Wrong password.' });
   });
@@ -1269,6 +1274,17 @@ export function createMockApi(options: MockOptions = {}): HubApi {
 
     system: {
       // The mock is always the admin once signed in.
+      time: authed((): DeviceTime => ({ nowMs: Date.now() + clockOffsetMs, valid: clockValid, source: clockValid ? 'browser' : null })),
+      setTime: authed((nowMs: number): DeviceTime => {
+        clockOffsetMs = nowMs - Date.now();
+        clockValid = true;
+        return { nowMs, valid: true, source: 'browser' };
+      }),
+      syncTime: authed(() => {
+        if (!clockValid) throw new ApiError('conflict', "This device's clock is not set yet. Set it on the System page first.");
+        const nodes = peers.filter((peer) => peer.online && peer.list === 'whitelist').length;
+        return { nodes, time: { nowMs: Date.now() + clockOffsetMs, valid: true, source: 'browser' as const } };
+      }),
       report: authed(() =>
         [
           'Kaonic system report',
@@ -1439,19 +1455,20 @@ export function createMockApi(options: MockOptions = {}): HubApi {
         band.filter = filter;
         return refreshFilter(band);
       }),
-      updateBandEverywhere: authed((id, config) => {
+      updateBandEverywhere: authed((id: BandId, config: RadioConfig, now = false) => {
         const band = checkBand(id, config);
         if (!band.usedBy.includes('mesh')) {
           throw new ApiError('validation_failed', 'Only the mesh band is changed on every node.', { scope: 'Set other bands per node.' });
         }
-        const switchAt = Date.now() + 10_000;
+        const delay = now ? 2_000 : 10_000;
+        const switchAt = Date.now() + delay;
         band.pendingSwitch = { at: switchAt, switched: false, config };
         // The mock switches on time and hears the other nodes straight away.
         setTimeout(() => {
           band.config = { ...band.config, ...config };
           band.pendingSwitch = null;
           refreshFilter(band);
-        }, 10_000);
+        }, delay);
         return { switchAt, nodes: peers.filter((peer) => peer.trust.network === 'ours').length };
       }),
       startTest: authed((id, request) => {
@@ -1576,9 +1593,26 @@ export function createMockApi(options: MockOptions = {}): HubApi {
           sharing: nodeSharingView(id),
         };
       }),
-      release: authed(() => RELEASE),
+      uploadUpdate: authed((file: File, _password: string, onProgress?: (fraction: number) => void) => {
+        onProgress?.(1);
+        const version = /(\d+\.\d+\.\d+)/.exec(file.name)?.[1] ?? '1.0.1';
+        const pkg: UpdatePackage = { id: `${(updatePackages.size + 1).toString(16).padStart(16, '0')}`, version, signed: false, sizeBytes: file.size || 12_600_000, packedBytes: Math.round((file.size || 12_600_000) * 0.42) };
+        updatePackages.set(pkg.id, pkg);
+        return pkg;
+      }),
       jobs: authed(() => jobs),
-      updateSoftware: authed((ids: string[]) => startJobs(ids, 'update', (peer) => void (peer.version = RELEASE.version))),
+      updateSoftware: authed((ids: string[], packageId: string) => {
+        const pkg = updatePackages.get(packageId);
+        if (!pkg) throw new ApiError('validation_failed', 'Upload the hub package again.', { package: 'Upload the hub package again.' });
+        return startJobs(ids, 'update', (peer) => void (peer.version = pkg.version));
+      }),
+      cancelJob: authed((id: string) => {
+        const job = jobs.find((candidate) => candidate.id === id);
+        if (!job || job.kind !== 'update' || (job.state !== 'queued' && job.state !== 'running')) throw new ApiError('conflict', 'This job cannot be stopped.');
+        Object.assign(job, { state: 'failed', detail: 'Cancelled' });
+        jobEffects.delete(job.id);
+        emit('jobs', jobs);
+      }),
       setRadio: authed((ids: string[], band: BandId, config: RadioConfig) => {
         const limits = seedRadio().find((candidate) => candidate.id === band)!;
         if (config.modulation.kind !== 'off' && (config.frequencyHz < limits.minHz || config.frequencyHz > limits.maxHz)) {
@@ -1638,9 +1672,18 @@ export function createMockApi(options: MockOptions = {}): HubApi {
 
     software: {
       state: authed(() => installer.software.state()),
-      updateHub: slow((file: File, upload: PackageUpload) => installer.software.updateHub(file, upload)),
-      updateInstaller: slow((file: File, upload: PackageUpload) => installer.software.updateInstaller(file, upload)),
-      updateProgram: slow((id: CoreProgramId, file: File, upload: PackageUpload) => installer.software.updateProgram(id, file, upload)),
+      updateHub: slow((file: File, upload: PackageUpload, onProgress?: (fraction: number) => void) => {
+        onProgress?.(1);
+        return installer.software.updateHub(file, upload);
+      }),
+      updateInstaller: slow((file: File, upload: PackageUpload, onProgress?: (fraction: number) => void) => {
+        onProgress?.(1);
+        return installer.software.updateInstaller(file, upload);
+      }),
+      updateProgram: slow((id: CoreProgramId, file: File, upload: PackageUpload, onProgress?: (fraction: number) => void) => {
+        onProgress?.(1);
+        return installer.software.updateProgram(id, file, upload);
+      }),
       history: authed((filter?: { id?: string; limit?: number }) => installer.software.history(filter)),
     },
 

@@ -175,6 +175,7 @@ export interface WireRadioBand {
   filters?: { index: number; label: string; min_mhz: number; max_mhz: number }[];
   active_filter?: number | null;
   filter_state?: 'ok' | 'unavailable' | 'none';
+  tx_power_max?: { ofdm: number[]; qpsk: number[]; fsk: number[] };
 }
 
 export interface WireRadioFrame {
@@ -406,7 +407,8 @@ export interface WireRemoteDevice {
 }
 
 export type WireRemoteJobsInput =
-  | { kind: 'node_update' | 'node_restart'; node_ids: Hash[] }
+  | { kind: 'node_update'; node_ids: Hash[]; package: string; allow_downgrade?: boolean }
+  | { kind: 'node_restart'; node_ids: Hash[] }
   | { kind: 'node_radio'; node_ids: Hash[]; band: WireBandId; config: WireRadioConfig }
   | { kind: 'node_ptt'; node_ids: Hash[]; settings: WirePttSettingsPatch };
 
@@ -490,8 +492,12 @@ export interface WireSoftwareEvent {
   message?: string;
 }
 
-export interface WireUpdates {
-  release: { version: string; size_bytes: number } | null;
+export interface WireUpdatePackage {
+  id: string;
+  version: string;
+  signed: boolean;
+  size_bytes: number;
+  packed_bytes: number;
 }
 
 export interface WireJob {

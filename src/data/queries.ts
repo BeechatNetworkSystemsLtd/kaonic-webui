@@ -58,6 +58,7 @@ export const keys = {
   bootJob: (id: string) => ['bootJob', id] as const,
   os: ['os'] as const,
   uiPages: ['ui', 'pages'] as const,
+  time: ['time'] as const,
   osJob: (id: string) => ['osJob', id] as const,
   network: ['network'] as const,
   wifi: ['wifi'] as const,
@@ -73,7 +74,6 @@ export const keys = {
   pttTestWav: ['ptt', 'test-wav'] as const,
   peers: ['peers'] as const,
   node: (id: string) => ['node', id] as const,
-  release: ['release'] as const,
   jobs: ['jobs'] as const,
   plugins: ['plugins'] as const,
   pluginPolicy: ['plugin-policy'] as const,
@@ -139,7 +139,7 @@ export function useRestartService() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (unit: string) => api.system.restartService(unit),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.services }),
+    onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: keys.services }), client.invalidateQueries({ queryKey: keys.software })]),
   });
 }
 
@@ -184,6 +184,42 @@ export function useSetUiPages() {
     onMutate: (shown) => client.setQueryData(keys.uiPages, shown),
     onSettled: () => client.invalidateQueries({ queryKey: keys.uiPages }),
   });
+}
+
+/* ── the clock ── */
+
+export const useDeviceTime = () => useQuery({ queryKey: keys.time, queryFn: api.system.time, refetchInterval: 30_000 });
+
+/** Sets this device's clock from the browser. */
+export function useSetTime() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: () => api.system.setTime(Date.now()), onSuccess: (time) => client.setQueryData(keys.time, time) });
+}
+
+/**
+ * Sets the device's clock from this browser once while it is not valid: boards have no
+ * battery clock, and a member may have no admin in reach to get the network's time from.
+ */
+export function useAutoClock() {
+  const auth = useAuthState();
+  const signedIn = auth.data?.authenticated === true && auth.data.role === 'admin';
+  const time = useQuery({ queryKey: keys.time, queryFn: api.system.time, enabled: signedIn, refetchInterval: 30_000 });
+  const set = useSetTime();
+  const needed = signedIn && time.data?.valid === false;
+  const { mutate, isPending } = set;
+  // Each reading that says the clock is not valid sets it again: a restarted hub, or a
+  // failed try, is caught at the next reading.
+  const readAt = time.dataUpdatedAt;
+  useEffect(() => {
+    if (needed && !isPending) mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per reading, not on every pending change
+  }, [needed, readAt, mutate]);
+}
+
+/** Pushes this device's clock to every node. */
+export function useSyncTimeToNodes() {
+  const client = useQueryClient();
+  return useMutation({ mutationFn: api.system.syncTime, onSuccess: (result) => client.setQueryData(keys.time, result.time) });
 }
 
 /* ── OS updates ── */
@@ -374,7 +410,7 @@ export function useSetMeshRadio() {
 export function useUpdateRadioBandEverywhere() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, config }: { id: BandId; config: RadioConfig }) => api.radio.updateBandEverywhere(id, config),
+    mutationFn: ({ id, config, now = false }: { id: BandId; config: RadioConfig; now?: boolean }) => api.radio.updateBandEverywhere(id, config, now),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.radio }),
   });
 }
@@ -497,17 +533,22 @@ export const useNodeDetails = (id: string, enabled: boolean) =>
 export const useNodesDetails = (ids: string[], enabled: boolean) =>
   useQueries({ queries: ids.map((id) => ({ queryKey: keys.node(id), queryFn: () => api.nodes.details(id), enabled, retry: false, staleTime: 60_000 })) });
 
-export const useSoftwareRelease = () => useQuery({ queryKey: keys.release, queryFn: api.nodes.release, staleTime: Infinity });
+/** Uploads a hub package to this device, for sending to nodes. */
+export const useUploadNodeUpdate = () =>
+  useMutation({ mutationFn: ({ file, password, onProgress }: { file: File; password: string; onProgress?: (fraction: number) => void }) => api.nodes.uploadUpdate(file, password, onProgress) });
+
+/** Stops a node update; the job ends as it is stopped. */
+export const useCancelJob = () => useMutation({ mutationFn: (id: string) => api.nodes.cancelJob(id) });
 export const useNodeJobs = () => useQuery({ queryKey: keys.jobs, queryFn: api.nodes.jobs, ...live });
 
-export type NodeAction = { kind: 'update' } | { kind: 'restart' } | { kind: 'radio'; band: BandId; config: RadioConfig } | { kind: 'ptt'; settings: RemotePttSettings };
+export type NodeAction = { kind: 'update'; packageId: string } | { kind: 'restart' } | { kind: 'radio'; band: BandId; config: RadioConfig } | { kind: 'ptt'; settings: RemotePttSettings };
 
 /** Starts an action on one or more nodes. The jobs it creates are followed through `useNodeJobs`. */
 export function useNodeAction() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ ids, action }: { ids: string[]; action: NodeAction }) => {
-      if (action.kind === 'update') return api.nodes.updateSoftware(ids);
+      if (action.kind === 'update') return api.nodes.updateSoftware(ids, action.packageId);
       if (action.kind === 'restart') return api.nodes.restart(ids);
       if (action.kind === 'ptt') return api.nodes.setPtt(ids, action.settings);
       return api.nodes.setRadio(ids, action.band, action.config);
@@ -650,7 +691,7 @@ export const useSoftware = (following: number | null = null) =>
 export function useUpdateHub() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateHub(file, upload),
+    mutationFn: ({ file, upload, onProgress }: { file: File; upload: PackageUpload; onProgress?: (fraction: number) => void }) => api.software.updateHub(file, upload, onProgress),
     onSuccess: (job) =>
       client.setQueryData<SoftwareState>(keys.software, (state) => (state ? { ...state, hubUpdate: job } : state)),
   });
@@ -659,7 +700,7 @@ export function useUpdateHub() {
 export function useUpdateInstaller() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateInstaller(file, upload),
+    mutationFn: ({ file, upload, onProgress }: { file: File; upload: PackageUpload; onProgress?: (fraction: number) => void }) => api.software.updateInstaller(file, upload, onProgress),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.software });
       void client.invalidateQueries({ queryKey: keys.softwareHistory });
@@ -671,7 +712,7 @@ export function useUpdateInstaller() {
 export function useUpdateProgram(id: CoreProgramId) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, upload }: { file: File; upload: PackageUpload }) => api.software.updateProgram(id, file, upload),
+    mutationFn: ({ file, upload, onProgress }: { file: File; upload: PackageUpload; onProgress?: (fraction: number) => void }) => api.software.updateProgram(id, file, upload, onProgress),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: keys.software });
       void client.invalidateQueries({ queryKey: keys.softwareHistory });

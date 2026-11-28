@@ -6,6 +6,7 @@ import type {
   BandId,
   BootImage,
   BootJob,
+  DeviceTime,
   OsJob,
   OsState,
   BootMode,
@@ -53,7 +54,7 @@ import type {
   ServiceStatus,
   SetupInput,
   SoftwareEvent,
-  SoftwareRelease,
+  UpdatePackage,
   SoftwareState,
   SourceId,
   SystemMetrics,
@@ -146,6 +147,12 @@ export interface HubApi {
   system: {
     /** Everything about this device's Kaonic software and OS, as plain text to paste into a support request. Admin only. */
     report(): Promise<string>;
+    /** The device's clock and whether it is valid. */
+    time(): Promise<DeviceTime>;
+    /** Sets this device's clock from this browser and saves it. On the admin device it goes to every node at once. Admin only. */
+    setTime(nowMs: number): Promise<DeviceTime>;
+    /** Pushes this device's clock to every node with a link, which take it even when behind theirs. Admin only. */
+    syncTime(): Promise<{ nodes: number; time: DeviceTime }>;
     metrics(): Promise<SystemMetrics>;
     services(): Promise<ServiceStatus[]>;
     restartService(unit: string): Promise<ServiceStatus>;
@@ -204,9 +211,10 @@ export interface HubApi {
     updateBand(id: BandId, config: RadioConfig): Promise<RadioBand>;
     /**
      * The mesh band on every node at once (admin device only): sent to every linked node,
-     * all switch at `switchAt`; a node that hears nobody within 60 s goes back.
+     * all switch at `switchAt` (this browser's time): in 10 s, or with `now` in 2 s, just
+     * long enough for the change to reach every node. A node that hears nobody within 60 s goes back.
      */
-    updateBandEverywhere(id: BandId, config: RadioConfig): Promise<{ switchAt: number; nodes: number }>;
+    updateBandEverywhere(id: BandId, config: RadioConfig, now?: boolean): Promise<{ switchAt: number; nodes: number }>;
     /** The band's sub-GHz filter, applied straight away for the frequency the band runs now. */
     setBandFilter(id: BandId, filter: FilterChoice): Promise<RadioBand>;
     /** Sends a test message on a band (once), or starts sending it repeatedly; replaces the band's running test. */
@@ -285,9 +293,13 @@ export interface HubApi {
   nodes: {
     /** Asks the node about itself. Fails if it cannot be reached. */
     details(id: string): Promise<NodeDetails>;
-    release(): Promise<SoftwareRelease>;
+    /** Checks a hub package and keeps it on this device for sending to nodes. */
+    uploadUpdate(file: File, password: string, onProgress?: (fraction: number) => void): Promise<UpdatePackage>;
     jobs(): Promise<NodeJob[]>;
-    updateSoftware(ids: string[]): Promise<NodeJob[]>;
+    /** Sends the uploaded package to each node over the radio, one at a time, and installs it. */
+    updateSoftware(ids: string[], packageId: string): Promise<NodeJob[]>;
+    /** Stops an update; what the node received so far is kept for the next try. */
+    cancelJob(id: string): Promise<void>;
     setRadio(ids: string[], band: BandId, config: RadioConfig): Promise<NodeJob[]>;
     restart(ids: string[]): Promise<NodeJob[]>;
     /** Sets the talk basics on each node. */
@@ -332,11 +344,11 @@ export interface HubApi {
   software: {
     state(): Promise<SoftwareState>;
     /** Starts a hub update and resolves once the package is checked; the hub then restarts. Read the outcome from `state().hubUpdate`. */
-    updateHub(file: File, upload: PackageUpload): Promise<HubUpdate>;
+    updateHub(file: File, upload: PackageUpload, onProgress?: (fraction: number) => void): Promise<HubUpdate>;
     /** Updates the installer and waits for it (up to two minutes). Rejects with the reason if the old one had to come back. */
-    updateInstaller(file: File, upload: PackageUpload): Promise<InstallerUpdateResult>;
+    updateInstaller(file: File, upload: PackageUpload, onProgress?: (fraction: number) => void): Promise<InstallerUpdateResult>;
     /** Updates commd or the factory server and waits until it runs the update (up to two minutes). Rejects with the reason if the old one had to come back. */
-    updateProgram(id: CoreProgramId, file: File, upload: PackageUpload): Promise<InstallerUpdateResult>;
+    updateProgram(id: CoreProgramId, file: File, upload: PackageUpload, onProgress?: (fraction: number) => void): Promise<InstallerUpdateResult>;
     /** Newest first. `id` narrows it to one plugin, `kaonic-hub` or `kaonic-hub-installer`. */
     history(filter?: { id?: string; limit?: number }): Promise<SoftwareEvent[]>;
   };

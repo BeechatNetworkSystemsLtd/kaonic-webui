@@ -64,7 +64,7 @@ export function seedRadio(): RadioBand[] {
       module: 0,
       ...shape('sub_ghz'),
       interface: 'rf09_a',
-      config: { frequencyHz: 869_535_000, channelSpacingHz: 200_000, channel: 11, modulation: { kind: 'ofdm', mcs: 6, option: 1 }, txPower: 25, ...DRIVER(), frontend: { agcMap: 2, agcTarget: 3, lnaBypass: false } },
+      config: { frequencyHz: 869_535_000, channelSpacingHz: 200_000, channel: 11, modulation: { kind: 'ofdm', mcs: 3, option: 1 }, txPower: 25, ...DRIVER(), frontend: { agcMap: 2, agcTarget: 3, lnaBypass: false } },
       usedBy: ['mesh', 'vpn'],
       lastRssi: -71,
     },
@@ -251,7 +251,8 @@ export function seedServices(): ServiceStatus[] {
   return [
     { unit: 'kaonic-hub.service', name: 'Hub', state: 'active', version: '1.0.0-dev' },
     { unit: 'kaonic-commd.service', name: 'Radio control', state: 'active', version: '0.9.4' },
-    { unit: 'kaonic-installer.service', name: 'Installer', state: 'active', version: '0.3.1' },
+    { unit: 'kaonic-hub-installer.service', name: 'Plugin installer', state: 'active', version: null },
+    { unit: 'kaonic-factory.service', name: 'Factory server', state: 'active', version: null },
   ];
 }
 

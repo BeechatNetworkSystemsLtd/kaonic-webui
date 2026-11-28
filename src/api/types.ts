@@ -326,6 +326,16 @@ export type FilterChoice = 'auto' | number;
 /** `unavailable`: the radio daemon cannot be asked (the choice is kept). `none`: nothing to choose on this band. */
 export type FilterState = 'ok' | 'unavailable' | 'none';
 
+/** The highest TX power register value (0–31) the board takes on a band, per modulation and rate. */
+export interface TxPowerMax {
+  /** OFDM, by MCS. */
+  ofdm: number[];
+  /** O-QPSK, by rate mode. */
+  qpsk: number[];
+  /** FSK, by symbol rate (in the order of `FSK_SYMBOL_RATES_KHZ`). */
+  fsk: number[];
+}
+
 export interface RadioBand {
   id: BandId;
   module: ModuleIndex;
@@ -345,6 +355,8 @@ export interface RadioBand {
   rangesHz?: [number, number][];
   capabilities?: RadioCapability[];
   pendingSwitch?: PendingSwitch | null;
+  /** The board's TX power limits on this band, as commd reports them. Absent from older hubs. */
+  txPowerMax?: TxPowerMax;
   /** What this board's front end is built for on this band, in MHz; shown, never enforced. Absent from older hubs. */
   boardRangeMhz?: [number, number] | null;
   filter?: FilterChoice;
@@ -552,10 +564,14 @@ export interface RemoteShellHandlers {
 /** The talk settings an admin can set on other nodes. */
 export type RemotePttSettings = Partial<Pick<PttSettings, 'volume' | 'micGain' | 'playOnDevice' | 'autoArm' | 'squelchEnabled' | 'squelchOpenDbfs' | 'relay'>>;
 
-/** The newest software this device can hand out to other nodes. */
-export interface SoftwareRelease {
+/** A hub package the admin keeps, gzipped, to send to other nodes over the radio. */
+export interface UpdatePackage {
+  id: string;
   version: string;
+  signed: boolean;
   sizeBytes: number;
+  /** What goes over the radio. */
+  packedBytes: number;
 }
 
 export type NodeJobKind = 'update' | 'radio' | 'restart' | 'ptt';
@@ -1199,6 +1215,15 @@ export interface KernelInstallResult {
   kernelFile: string | null;
   dtbFile: string | null;
   modulesPresent: boolean | null;
+}
+
+/** The device's clock. Kaonic boards have no battery clock: until something sets it, it is a guess. */
+export interface DeviceTime {
+  /** UTC, unix ms, in the device's clock. */
+  nowMs: number;
+  /** Set this boot (by hand, from a peer) or kept by NTP. */
+  valid: boolean;
+  source: 'browser' | 'hand' | 'peer' | 'ntp' | null;
 }
 
 /** An uploaded OS update, from upload to installed. */

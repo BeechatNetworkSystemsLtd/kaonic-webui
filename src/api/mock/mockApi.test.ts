@@ -229,12 +229,12 @@ describe('mock hub', () => {
       const peers = await api.peers.list();
       const trusted = peers.find((peer) => peer.list === 'whitelist' && peer.online)!;
       const stranger = peers.find((peer) => peer.list === 'none')!;
-      const release = await api.nodes.release();
+      const release = await api.nodes.uploadUpdate(new File([new Uint8Array(1000)], 'kaonic-hub-1.0.1.kpkg'), '');
       expect(trusted.version).not.toBe(release.version);
 
-      await expect(api.nodes.updateSoftware([stranger.id])).rejects.toMatchObject({ code: 'forbidden' });
+      await expect(api.nodes.updateSoftware([stranger.id], release.id)).rejects.toMatchObject({ code: 'forbidden' });
 
-      const [job] = await api.nodes.updateSoftware([trusted.id]);
+      const [job] = await api.nodes.updateSoftware([trusted.id], release.id);
       expect(job).toMatchObject({ nodeId: trusted.id, kind: 'update', state: 'queued' });
 
       // Long enough for the slowest node of the mock to finish.
@@ -357,6 +357,9 @@ describe('mock hub', () => {
     const aSub = (await api.radio.bands()).find((band) => band.id === 'a_sub')!;
     await expect(api.radio.updateBand('a_sub', { ...aSub.config, txPower: 26 })).rejects.toMatchObject({ code: 'validation_failed', fields: { txPower: expect.any(String) } });
     expect((await api.radio.updateBand('a_sub', { ...aSub.config, txPower: 25 })).config.txPower).toBe(25);
+    // A Kaonic 1S takes its full OFDM power at every MCS.
+    const qam = { ...aSub.config, modulation: { kind: 'ofdm' as const, mcs: 6, option: 1 } };
+    expect((await api.radio.updateBand('a_sub', { ...qam, txPower: 25 })).config.txPower).toBe(25);
     const qpsk = { ...aSub.config, modulation: { kind: 'qpsk' as const, chipRateKhz: 1000, rateMode: 2 } };
     await expect(api.radio.updateBand('b_sub', { ...qpsk, txPower: 21 })).rejects.toMatchObject({ fields: { txPower: expect.any(String) } });
     expect((await api.radio.updateBand('b_sub', { ...qpsk, txPower: 20 })).config.txPower).toBe(20);

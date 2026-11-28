@@ -300,6 +300,7 @@ export const toBand = (wire: WireRadioBand): RadioBand => ({
   ...(wire.active_filter !== undefined ? { activeFilter: wire.active_filter } : {}),
   ...(wire.filter_state !== undefined ? { filterState: wire.filter_state } : {}),
   ...(wire.test !== undefined ? { test: toRadioTest(wire.test) } : {}),
+  ...(wire.tx_power_max ? { txPowerMax: { ofdm: wire.tx_power_max.ofdm, qpsk: wire.tx_power_max.qpsk, fsk: wire.tx_power_max.fsk } } : {}),
 });
 
 /** A test run, or null for the bare `{ running: false }` of a band that has run none. */

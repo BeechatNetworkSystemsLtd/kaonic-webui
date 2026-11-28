@@ -1,6 +1,6 @@
 import type { HubApi } from '../client';
 import { ApiError } from '../errors';
-import type { HubEvents, HubTopic, NodeJob, PackageUpload, Peer, PttKeyResult, WifiScanEntry } from '../types';
+import type { DeviceTime, HubEvents, HubTopic, NodeJob, PackageUpload, Peer, PttKeyResult, WifiScanEntry } from '../types';
 import {
   fromRadioConfig,
   fromAdminSecret,
@@ -45,6 +45,7 @@ import {
   toVpnUplink,
 } from './convert';
 import { toBootImage, toBootJob, toBootStaged, toBootState, toOsJob, toOsState, type WireBootImage, type WireBootStaged, type WireBootJob, type WireBootState, type WireOsState } from './boot';
+import { hubNow } from '@/lib/hubClock';
 import { createEventStream, type EventStream } from './events';
 import { createPttAudioSocket } from './pttAudio';
 import { createRemoteShell } from './remoteShell';
@@ -81,7 +82,7 @@ import type {
   WireSystemMetrics,
   WireTopic,
   WireTrafficSample,
-  WireUpdates,
+  WireUpdatePackage,
   WireVpnCapture,
   WireVpnCapturedPacket,
   WireVpnPacket,
@@ -213,6 +214,14 @@ function liveList<T extends { id: string }>(
   };
 }
 
+interface WireDeviceTime {
+  now_ms: number;
+  valid: boolean;
+  source: DeviceTime['source'];
+}
+
+const toDeviceTime = (wire: WireDeviceTime): DeviceTime => ({ nowMs: wire.now_ms, valid: wire.valid, source: wire.source });
+
 export function createHttpApi(options: HttpApiOptions = {}): HubApi {
   const transport: Transport = createTransport({ fetch: options.fetch });
   const stream = createEventStream({ url: options.eventsUrl ?? defaultEventsUrl, WebSocket: options.WebSocket });
@@ -247,6 +256,13 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
     form.append('password', upload.password);
     if (upload.allowDowngrade) form.append('allow_downgrade', 'true');
     return form;
+  }
+
+  /** Sends a package form; with `onProgress`, as an upload that reports how much is sent. */
+  async function sendPackage<T>(url: string, form: FormData, timeoutMs: number, onProgress?: (fraction: number) => void): Promise<T> {
+    if (!onProgress) return write<T>('POST', url, form, { timeoutMs });
+    if (!transport.csrfToken()) await authState();
+    return transport.upload<T>(url, form, onProgress);
   }
 
   /** Keying: a taken floor (409) is an answer, not an error. */
@@ -372,6 +388,12 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
 
     system: {
       report: async () => (await transport.download('/system/report')).text(),
+      time: async () => toDeviceTime(await get<WireDeviceTime>('/system/time')),
+      setTime: async (nowMs) => toDeviceTime(await write<WireDeviceTime>('PUT', '/system/time', { now_ms: Math.round(nowMs) })),
+      syncTime: async () => {
+        const result = await write<{ nodes: number; time: WireDeviceTime }>('POST', '/system/time/sync');
+        return { nodes: result.nodes, time: toDeviceTime(result.time) };
+      },
       metrics: async () => toMetrics(await get<WireSystemMetrics>('/system/metrics')),
       services: async () => (await get<{ services: WireServiceStatus[] }>('/system/services')).services.map(toService),
       restartService: async (unit) => toService(await write<WireServiceStatus>('POST', path`/system/services/${unit}/restart`)),
@@ -442,9 +464,10 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
     radio: {
       bands: async () => (await get<WireRadioBand[]>('/radio/bands')).map(toBand),
       updateBand: async (id, config) => toBand(await write<WireRadioBand>('PUT', path`/radio/bands/${id}`, fromRadioConfig(config))),
-      updateBandEverywhere: async (id, config) => {
-        const result = await write<{ switch_at_ts_ms: number; nodes: number }>('PUT', `${path`/radio/bands/${id}`}?scope=network`, fromRadioConfig(config));
-        return { switchAt: result.switch_at_ts_ms, nodes: result.nodes };
+      updateBandEverywhere: async (id, config, now = false) => {
+        const result = await write<{ switch_at_ts_ms: number; nodes: number }>('PUT', `${path`/radio/bands/${id}`}?scope=network${now ? '&now=true' : ''}`, fromRadioConfig(config));
+        // The hub's clock can be far off (no battery clock): the moment is given in this browser's time.
+        return { switchAt: result.switch_at_ts_ms - (hubNow() - Date.now()), nodes: result.nodes };
       },
       setBandFilter: async (id, filter) => toBand(await write<WireRadioBand>('PUT', path`/radio/bands/${id}/filter`, { filter })),
       startTest: async (id, request) => {
@@ -524,13 +547,18 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
 
     nodes: {
       details: async (id) => toNodeDetails(await get<WireRemoteDevice>(path`/peers/${id}/remote/device`)),
-      async release() {
-        const { release } = await get<WireUpdates>('/updates');
-        if (!release) throw new ApiError('not_found', 'This device holds no software release to hand out.');
-        return { version: release.version, sizeBytes: release.size_bytes };
+      async uploadUpdate(file, password, onProgress) {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('password', password);
+        const wire = await sendPackage<WireUpdatePackage>('/remote/packages', form, SLOW_MS, onProgress);
+        return { id: wire.id, version: wire.version, signed: wire.signed, sizeBytes: wire.size_bytes, packedBytes: wire.packed_bytes };
       },
       jobs: loadNodeJobs,
-      updateSoftware: (ids) => startJobs({ kind: 'node_update', node_ids: ids }),
+      updateSoftware: (ids, packageId) => startJobs({ kind: 'node_update', node_ids: ids, package: packageId }),
+      cancelJob: async (id) => {
+        await write('DELETE', path`/jobs/${id}`);
+      },
       restart: (ids) => startJobs({ kind: 'node_restart', node_ids: ids }),
       setRadio: (ids, band, config) => startJobs({ kind: 'node_radio', node_ids: ids, band, config: fromRadioConfig(config) }),
       setPtt: (ids, settings) => startJobs({ kind: 'node_ptt', node_ids: ids, settings: fromPttSettings(settings) }),
@@ -585,15 +613,16 @@ export function createHttpApi(options: HttpApiOptions = {}): HubApi {
 
     software: {
       state: async () => toSoftware(await get<WireSoftware>('/software')),
-      updateHub: async (file, upload) => toHubUpdate(await write<WireHubJob>('POST', '/software/hub', packageForm(file, upload), { timeoutMs: SLOW_MS })),
-      async updateInstaller(file, upload) {
+      updateHub: async (file, upload, onProgress) =>
+        toHubUpdate(await sendPackage<WireHubJob>('/software/hub', packageForm(file, upload), SLOW_MS, onProgress)),
+      async updateInstaller(file, upload, onProgress) {
         // The hub answers once the new installer is up, or the old one is back: up to two minutes.
-        const record = await write<{ version?: string }>('POST', '/software/installer', packageForm(file, upload), { timeoutMs: INSTALLER_UPDATE_MS });
+        const record = await sendPackage<{ version?: string }>('/software/installer', packageForm(file, upload), INSTALLER_UPDATE_MS, onProgress);
         return { version: record.version ?? '' };
       },
-      async updateProgram(id, file, upload) {
+      async updateProgram(id, file, upload, onProgress) {
         // The hub answers once the program runs the update, or the old one is back: up to two minutes.
-        const record = await write<{ version?: string }>('POST', path`/software/core/${id}`, packageForm(file, upload), { timeoutMs: INSTALLER_UPDATE_MS });
+        const record = await sendPackage<{ version?: string }>(path`/software/core/${id}`, packageForm(file, upload), INSTALLER_UPDATE_MS, onProgress);
         return { version: record.version ?? '' };
       },
       async history(filter = {}) {
