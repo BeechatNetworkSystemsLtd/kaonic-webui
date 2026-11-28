@@ -63,7 +63,7 @@ function DeviceCard() {
           <p className={styles.model}>{device.data.model}</p>
           <KeyValues
             rows={[
-              ['Serial', <span className="mono">{device.data.serial}</span>],
+              ['Serial', <span className={`${styles.serial} mono`}>{device.data.serial}</span>],
               ['Identity', <span className="mono" title={device.data.identityHash}>{shortHash(device.data.identityHash)}</span>],
               ['Uptime', <span className="num">{formatDuration(device.data.uptimeSecs)}</span>],
               ['Hub', device.data.versions.hub],

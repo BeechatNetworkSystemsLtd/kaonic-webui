@@ -155,6 +155,7 @@ function PolicyPanel({ admin }: { admin: boolean }) {
   const policy = usePluginPolicy();
   const setPolicy = useSetPluginPolicy();
   const [wanted, setWanted] = useState<boolean | null>(null);
+  const needsPassword = useAuthState().data?.passwordSet ?? true;
   const [password, setPassword] = useState('');
   const fields = validationFields(setPolicy.error);
   const devDevice = policy.data?.releaseKey === false;
@@ -202,11 +203,13 @@ function PolicyPanel({ admin }: { admin: boolean }) {
         </div>
         {wanted !== null ? (
           <form className={styles.confirm} onSubmit={onSubmit}>
-            <Field label={`Enter the password to turn it ${wanted ? 'on' : 'off'}`} error={fields.password}>
-              {(control) => (
-                <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />
-              )}
-            </Field>
+            {needsPassword ? (
+              <Field label={`Enter the password to turn it ${wanted ? 'on' : 'off'}`} error={fields.password}>
+                {(control) => (
+                  <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />
+                )}
+              </Field>
+            ) : null}
             <FormError error={setPolicy.error} />
             <div className={styles.buttons}>
               <Button type="submit" size="small" variant="primary" busy={setPolicy.isPending}>

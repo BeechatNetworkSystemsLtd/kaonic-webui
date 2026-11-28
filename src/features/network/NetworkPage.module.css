@@ -11,10 +11,6 @@
   align-items: center;
   padding: var(--s4) var(--s2);
   border-radius: var(--radius-lg);
-  /* Drawing-board dots. */
-  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.5px);
-  background-size: 22px 22px;
-  background-position: 11px 11px;
 }
 .wires {
   position: absolute;

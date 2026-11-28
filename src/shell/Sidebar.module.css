@@ -50,8 +50,14 @@
   padding: var(--s4) var(--s3) var(--s2);
   border-top: 1px solid var(--line);
 }
+/* Small enough that a full serial number fits on one line next to its label. */
 .device dl {
   width: 100%;
+  column-gap: var(--s3);
+  font-size: 0.6875rem;
+}
+.serial {
+  white-space: nowrap;
 }
 .codename {
   font-family: var(--font-mono);

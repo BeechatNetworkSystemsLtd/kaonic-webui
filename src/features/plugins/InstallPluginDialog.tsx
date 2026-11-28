@@ -1,7 +1,7 @@
 import { useId, useState, type DragEvent, type FormEvent } from 'react';
 import { PackagePlus } from 'lucide-react';
 import { validationFields, type Plugin, type PluginInstallResult, type PluginPackageInfo } from '@/api';
-import { useCheckPluginPackage, useInstallPlugin, usePluginPolicy, useUpdatePlugin } from '@/data/queries';
+import { useAuthState, useCheckPluginPackage, useInstallPlugin, usePluginPolicy, useUpdatePlugin } from '@/data/queries';
 import { formatBytes } from '@/lib/format';
 import { Badge, Button, Dialog, Field, FormError, Input, Notice, Switch } from '@/ui';
 import { compareVersions, isDowngradeRefusal, PERMISSIONS } from './software';
@@ -23,6 +23,7 @@ interface InstallPluginDialogProps {
 export function InstallPluginDialog({ plugin, onClose, onInstalled }: InstallPluginDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
+  const needsPassword = useAuthState().data?.passwordSet ?? true;
   const [password, setPassword] = useState('');
   /** Offered for an older version, or once the device refused one; stays until another file is chosen. */
   const [downgradeOffered, setDowngradeOffered] = useState(false);
@@ -153,19 +154,21 @@ export function InstallPluginDialog({ plugin, onClose, onInstalled }: InstallPlu
               </>
             ) : null}
 
-            <Field label="Enter the password to confirm" error={fields.password}>
-              {(control) => (
-                <Input
-                  {...control}
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  disabled={sending.isPending}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              )}
-            </Field>
+            {needsPassword ? (
+              <Field label="Enter the password to confirm" error={fields.password}>
+                {(control) => (
+                  <Input
+                    {...control}
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    disabled={sending.isPending}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                )}
+              </Field>
+            ) : null}
           </>
         ) : null}
 
@@ -176,7 +179,7 @@ export function InstallPluginDialog({ plugin, onClose, onInstalled }: InstallPlu
             type="submit"
             variant="primary"
             busy={sending.isPending}
-            disabled={!info || blocked !== null || !password || (downgradeOffered && !allowDowngrade)}
+            disabled={!info || blocked !== null || (needsPassword && !password) || (downgradeOffered && !allowDowngrade)}
           >
             {sending.isPending ? (plugin ? 'Updating' : 'Installing') : plugin ? 'Update plugin' : 'Install plugin'}
           </Button>
