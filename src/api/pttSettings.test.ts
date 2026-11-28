@@ -4,7 +4,7 @@ import { DEFAULT_PTT_SETTINGS, PTT_RANGES, pttSettingsProblems } from './pttSett
 
 describe('push-to-talk settings', () => {
   it('starts from the plugin defaults, which are valid', () => {
-    expect(DEFAULT_PTT_SETTINGS).toMatchObject({ talkInput: 'device', autoArm: true, squelchEnabled: true, squelchOpenDbfs: -50, opusBitrateBps: 20_000, packetFrames: 4 });
+    expect(DEFAULT_PTT_SETTINGS).toMatchObject({ talkInput: 'device', autoArm: true, squelchEnabled: true, squelchOpenDbfs: -30, opusBitrateBps: 20_000, packetFrames: 4 });
     expect(pttSettingsProblems(DEFAULT_PTT_SETTINGS, DEFAULT_PTT_SETTINGS)).toEqual({});
   });
 

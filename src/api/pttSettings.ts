@@ -16,7 +16,7 @@ export const DEFAULT_PTT_SETTINGS: PttSettings = {
   rxWhileTx: false,
   autoArm: true,
   squelchEnabled: true,
-  squelchOpenDbfs: -50,
+  squelchOpenDbfs: -30,
   squelchHysteresisDb: 6,
   squelchHangoverMs: 200,
   squelchPrerollMs: 120,
