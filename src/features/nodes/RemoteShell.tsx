@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { api, errorMessage, validationFields, type Peer, type RemoteShell } from '@/api';
+import { useAuthState } from '@/data/queries';
 import { shortHash } from '@/lib/format';
 import { Button, Dialog, Field, FormError, Input, Notice, Panel, Status, type Tone } from '@/ui';
 import { keySequence, lineText, Screen, type Cell, type Style } from './terminal';
@@ -18,12 +19,13 @@ const STATE_TEXT: Record<ShellState['kind'], [string, Tone]> = {
   closed: ['Closed', 'neutral'],
 };
 
-/** Asks for the password, then opens the shell. */
+/** Asks for the password if one is set, then opens the shell. */
 export function OpenShellDialog({ peer, error, onOpen, onClose }: { peer: Peer; error?: unknown; onOpen: (password: string) => void; onClose: () => void }) {
+  const needsPassword = useAuthState().data?.passwordSet ?? true;
   const [password, setPassword] = useState('');
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (password) onOpen(password);
+    if (password || !needsPassword) onOpen(password);
   };
   return (
     <Dialog title="Open a shell" onClose={onClose}>
@@ -32,11 +34,13 @@ export function OpenShellDialog({ peer, error, onOpen, onClose }: { peer: Peer; 
           A root shell on <span className="mono">{shortHash(peer.id)}</span> ({peer.codename}), over the mesh. Everything typed runs on that node as root. Opening it is recorded on
           both devices.
         </p>
-        <Field label="Enter the password to confirm" error={validationFields(error).password}>
-          {(control) => <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />}
-        </Field>
+        {needsPassword ? (
+          <Field label="Enter the password to confirm" error={validationFields(error).password}>
+            {(control) => <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />}
+          </Field>
+        ) : null}
         <div className={styles.buttons}>
-          <Button type="submit" variant="primary" disabled={!password}>
+          <Button type="submit" variant="primary" disabled={needsPassword && !password}>
             Open shell
           </Button>
           <Button onClick={onClose}>Cancel</Button>

@@ -224,3 +224,18 @@
 a.adminCard:hover {
   background: var(--surface-raised);
 }
+.syncTime {
+  display: grid;
+  justify-items: end;
+  gap: var(--s1);
+}
+.syncNote {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.syncError {
+  max-width: 32ch;
+  font-size: var(--text-sm);
+  color: var(--danger);
+  text-align: right;
+}

@@ -5,10 +5,10 @@ import { maxTxPower } from '@/api/radioLimits';
 import type { BandId, NodeDetails, Peer } from '@/api';
 import { errorMessage, validationFields } from '@/api';
 import { nodePagePath } from '@/app/pages';
-import { useDevice, useNodeDetails, useNodeJobs, usePeers, useSetNodeCodename, useSetNodeList, useSoftwareRelease } from '@/data/queries';
+import { useDevice, useNodeDetails, useNodeJobs, usePeers, useSetNodeCodename, useSetNodeList } from '@/data/queries';
 import { BAND_NAMES } from '@/features/radio/bands';
 import { describeRadio } from '@/features/radio/RadioConfigFields';
-import { formatAgo, formatDuration, shortHash } from '@/lib/format';
+import { formatAgo, seenText, formatDuration, shortHash } from '@/lib/format';
 import { Page, PanelGrid } from '@/shell/Page';
 import { Badge, Button, EmptyState, Field, FormError, Input, KeyValues, LoadError, Notice, Panel, Skeleton, Status } from '@/ui';
 import { JobStatus, JOB_NAMES } from './jobs';
@@ -59,7 +59,6 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
   const managed = isAdminDevice && peer.list === 'whitelist';
   // The node is only asked about itself when we are allowed to manage it and it can hear us.
   const details = useNodeDetails(peer.id, managed && peer.online);
-  const release = useSoftwareRelease().data;
   const jobs = (useNodeJobs().data ?? []).filter((job) => job.nodeId === peer.id).sort((a, b) => b.createdTs - a.createdTs);
   const move = useSetNodeList();
   const [dialog, setDialog] = useState<{ kind: 'update' | 'restart' | 'talk' | 'shell' | 'block' } | { kind: 'radio'; band: BandId } | null>(null);
@@ -70,7 +69,6 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
   const via = peers.find((candidate) => candidate.id === peer.viaId);
   const dash = '–';
   const version = details.data?.version ?? peer.version;
-  const upToDate = release !== undefined && version === release.version;
   const close = () => setDialog(null);
 
   return (
@@ -88,7 +86,7 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
       {move.isError ? <Notice tone="danger">{errorMessage(move.error)}</Notice> : null}
 
       <PanelGrid min={320}>
-        <Panel title="Node" actions={<Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : `Seen ${formatAgo(peer.lastSeenTs)}`}</Status>}>
+        <Panel title="Node" actions={<Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : seenText(peer.lastSeenTs)}</Status>}>
           <KeyValues
             rows={[
               ['Identity', <span className={`${styles.hash} mono`}>{peer.id}</span>],
@@ -124,8 +122,8 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
           title="Software"
           actions={
             managed ? (
-              <Button size="small" variant={upToDate ? 'default' : 'primary'} disabled={!peer.online || upToDate} onClick={() => setDialog({ kind: 'update' })}>
-                {upToDate ? 'Up to date' : 'Update'}
+              <Button size="small" disabled={!peer.online} onClick={() => setDialog({ kind: 'update' })}>
+                Update…
               </Button>
             ) : undefined
           }
@@ -133,7 +131,6 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
           <KeyValues
             rows={[
               ['Version', <span className="num">{version}</span>],
-              ['Newest available', <span className="num">{release?.version ?? dash}</span>],
               ['System', details.data?.osVersion || dash],
               ['Uptime', details.data ? formatDuration(details.data.uptimeSecs) : dash],
               ['Battery', details.data?.battery ? `${details.data.battery.percent}%` : dash],
@@ -198,7 +195,7 @@ function NodeView({ peer, peers }: { peer: Peer; peers: readonly Peer[] }) {
                   <span className={styles.bandName}>{BAND_NAMES[band.id]}</span>
                   <span className={`${styles.bandConfig} num`}>
                     {describeRadio(band.config)}
-                    {band.config.modulation.kind !== 'off' ? `, power ${band.config.txPower} of ${maxTxPower(band.config.modulation.kind)}` : ''}
+                    {band.config.modulation.kind !== 'off' ? `, power ${band.config.txPower} of ${maxTxPower(band.config.modulation, band.txPowerMax)}` : ''}
                   </span>
                   {band.usedBy.length > 0 ? <Badge tone="accent">Used by {band.usedBy.join(', ')}</Badge> : null}
                   <Button size="small" onClick={() => setDialog({ kind: 'radio', band: band.id })}>Change</Button>

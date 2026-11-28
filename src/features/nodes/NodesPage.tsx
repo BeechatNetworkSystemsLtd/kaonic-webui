@@ -4,8 +4,8 @@ import { ChevronDown } from 'lucide-react';
 import type { NodeJob, NodeList, Peer } from '@/api';
 import { errorMessage } from '@/api';
 import { nodePagePath } from '@/app/pages';
-import { useDevice, useNodeJobs, usePeers, useSetNodeList } from '@/data/queries';
-import { formatAgo, shortHash } from '@/lib/format';
+import { useDevice, useNodeJobs, usePeers, useSetNodeList, useSyncTimeToNodes } from '@/data/queries';
+import { formatAgo, seenText, shortHash } from '@/lib/format';
 import { Page } from '@/shell/Page';
 import { Button, EmptyState, Input, LoadError, Notice, Skeleton, Status, StatusDot } from '@/ui';
 import { currentJobs, isActive, JobStatus } from './jobs';
@@ -111,6 +111,7 @@ export default function NodesPage() {
           ? 'Every node this device knows about, grouped by the list it is on. Whitelisted nodes can be managed from here.'
           : 'Every node this device knows about. Your Kaonic Admin decides which nodes are in the network and which are blocked.'
       }
+      actions={isAdminDevice ? <SyncTime /> : null}
     >
       <Input className={styles.search} type="search" placeholder="Find by identity, codename or tag" aria-label="Find a node" value={search} onChange={(event) => setSearch(event.target.value)} />
 
@@ -240,7 +241,7 @@ function NodeTable({ rows, move, onBlock, jobs, selection }: NodeTableProps) {
                   {peer.tag ? <span className={styles.tag}>{peer.tag}</span> : null}
                 </td>
                 <td>
-                  <Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : `Seen ${formatAgo(peer.lastSeenTs)}`}</Status>
+                  <Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : seenText(peer.lastSeenTs)}</Status>
                 </td>
                 <td className={`${styles.number} num`}>{peer.hops ?? '–'}</td>
                 <td className={`${styles.number} num`}>{peer.rssi !== null ? `${peer.rssi} dBm` : '–'}</td>
@@ -289,12 +290,30 @@ function AdminSection({ admin, isAdminDevice }: { admin: Peer | undefined; isAdm
           <StatusDot tone={admin.online ? 'ok' : 'neutral'} />
           <span className="mono">{shortHash(admin.id)}</span>
           <span className="mono">{admin.codename}</span>
-          <Status tone={admin.online ? 'ok' : 'neutral'}>{admin.online ? 'In range' : `Seen ${formatAgo(admin.lastSeenTs)}`}</Status>
+          <Status tone={admin.online ? 'ok' : 'neutral'}>{admin.online ? 'In range' : seenText(admin.lastSeenTs)}</Status>
           <span className="muted">{LINK_TEXT[admin.link.state]}</span>
         </Link>
       ) : (
         <EmptyState title="Your Kaonic Admin has not been heard yet." />
       )}
     </section>
+  );
+}
+
+/** Pushes this device's clock to every node: they take it even when theirs is ahead. */
+function SyncTime() {
+  const sync = useSyncTimeToNodes();
+  return (
+    <div className={styles.syncTime}>
+      <Button busy={sync.isPending} onClick={() => sync.mutate()} title="Send this device's time to every node">
+        Sync time
+      </Button>
+      {sync.isSuccess ? (
+        <span className={styles.syncNote}>
+          Sent to {sync.data.nodes} {sync.data.nodes === 1 ? 'node' : 'nodes'}
+        </span>
+      ) : null}
+      {sync.isError ? <span className={styles.syncError}>{errorMessage(sync.error)}</span> : null}
+    </div>
   );
 }

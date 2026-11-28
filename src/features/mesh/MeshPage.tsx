@@ -6,7 +6,7 @@ import { errorMessage } from '@/api';
 import { nodePagePath } from '@/app/pages';
 import { useDevice, useNetwork, usePeers, useSetNodeList } from '@/data/queries';
 import { LINK_TEXT, LIST_TEXT, NETWORK_TEXT } from '@/features/nodes/labels';
-import { formatAgo, shortHash } from '@/lib/format';
+import { seenText, shortHash } from '@/lib/format';
 import { Button, KeyValues, LoadError, Notice, Skeleton, Status } from '@/ui';
 import { InternetSharingDialog } from './InternetSharing';
 import { MeshGraph, MeshLegend } from './MeshGraph';
@@ -128,7 +128,7 @@ function PeerDetails({ peer, peers, busy, error, act, onClose }: PeerDetailsProp
   const dash = '–';
   return (
     <PopupFrame title={shortHash(peer.id)} subtitle={peer.tag || undefined} onClose={onClose}>
-      <Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : `Out of range, last seen ${formatAgo(peer.lastSeenTs)}`}</Status>
+      <Status tone={peer.online ? 'ok' : 'neutral'}>{peer.online ? 'In range' : seenText(peer.lastSeenTs, 'Out of range, last seen')}</Status>
       <KeyValues
         rows={[
           ['Codename', <span className="mono">{peer.codename}</span>],

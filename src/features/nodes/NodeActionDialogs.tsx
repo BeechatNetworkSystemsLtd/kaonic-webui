@@ -1,10 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { FileArchive } from 'lucide-react';
 import { errorMessage, validationFields, type BandId, type Peer, type RadioBand, type RemotePttSettings } from '@/api';
-import { useNodeAction, useRadioBands, useSoftwareRelease, type NodeAction } from '@/data/queries';
+import { useAuthState, useNodeAction, useRadioBands, useUploadNodeUpdate, type NodeAction } from '@/data/queries';
 import { BAND_IDS, BAND_NAMES } from '@/features/radio/bands';
 import { RadioConfigFields, useRadioDraft } from '@/features/radio/RadioConfigFields';
 import { formatMegabytes, shortHash } from '@/lib/format';
 import { Button, Dialog, Field, FormError, Input, LoadError, Notice, Select, Skeleton } from '@/ui';
+import wizard from '@/features/system/UpdateOs.module.css';
 import styles from './NodeActionDialogs.module.css';
 
 /*
@@ -59,27 +61,85 @@ function Buttons({ children, onClose, busy }: { children: ReactNode; onClose: ()
 
 const outOfRange = (peer: Peer) => (peer.online ? null : 'out of range, will fail');
 
+/** Rough goodput of a transfer over one hop, for a time estimate only. */
+const RADIO_BYTES_PER_SEC = 10_000;
+
+function minutesText(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes === 1 ? 'about a minute' : `about ${minutes} minutes`;
+}
+
+/**
+ * Picks a hub package, uploads it to this device (quick, over Wi-Fi or USB), then starts the
+ * update: the package goes to the nodes over the radio in the background, one node at a time.
+ */
 export function UpdateSoftwareDialog({ nodes, onClose }: ActionDialogProps) {
-  const release = useSoftwareRelease();
+  const needsPassword = useAuthState().data?.passwordSet ?? true;
+  const upload = useUploadNodeUpdate();
   const { busy, error, start } = useStart(nodes, onClose);
-  const behind = release.data ? nodes.filter((peer) => peer.version !== release.data.version) : nodes;
+  const [file, setFile] = useState<File | null>(null);
+  const [password, setPassword] = useState('');
+  const [sent, setSent] = useState(0);
+  const pkg = upload.data;
+  const behind = pkg ? nodes.filter((peer) => peer.version !== pkg.version) : nodes;
+
+  function send(event: FormEvent) {
+    event.preventDefault();
+    if (!file) return;
+    setSent(0);
+    upload.mutate({ file, password, onProgress: setSent });
+  }
 
   return (
     <Dialog title="Update software" onClose={onClose}>
-      {release.isPending ? (
-        <Skeleton />
-      ) : release.isError ? (
-        <LoadError error={release.error} onRetry={() => void release.refetch()} />
+      {!pkg ? (
+        <form className={styles.form} onSubmit={send}>
+          <p>Choose the hub package. It is checked on this device first, then sent to the nodes over the radio in the background, one node at a time.</p>
+          <label className={wizard.drop}>
+            <FileArchive className={wizard.dropIcon} aria-hidden />
+            <span className={wizard.dropTitle}>{file ? file.name : 'Choose the hub package'}</span>
+            <span className={wizard.dropHint}>
+              {file ? formatMegabytes(file.size / 1_000_000) : <>The <span className="mono">kaonic-hub-….kpkg</span> file</>}
+            </span>
+            <input
+              type="file"
+              className={wizard.fileInput}
+              accept=".kpkg,.tar,application/x-tar"
+              disabled={upload.isPending}
+              onChange={(event) => {
+                setFile(event.target.files?.[0] ?? null);
+                event.target.value = '';
+                upload.reset();
+              }}
+            />
+          </label>
+          {needsPassword ? (
+            <Field label="Enter the password to confirm" error={validationFields(upload.error).password}>
+              {(control) => <Input {...control} type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />}
+            </Field>
+          ) : null}
+          {upload.isPending ? (
+            <div className={wizard.track} role="progressbar" aria-label="Uploading" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(sent * 100)}>
+              <div className={wizard.fill} style={{ width: `${Math.round(sent * 100)}%` }} />
+            </div>
+          ) : null}
+          {upload.isError && !validationFields(upload.error).password ? <Notice tone="danger">{errorMessage(upload.error)}</Notice> : null}
+          <Buttons onClose={onClose} busy={upload.isPending}>
+            <Button type="submit" variant="primary" busy={upload.isPending} disabled={!file || (needsPassword && !password)}>
+              {upload.isPending ? (sent >= 1 ? 'Checking' : 'Uploading') : 'Next'}
+            </Button>
+          </Buttons>
+        </form>
       ) : (
         <>
           <p>
-            Version <strong className="num">{release.data.version}</strong> ({formatMegabytes(release.data.sizeBytes / 1_000_000)}) is sent over the radio, one node at a time. A node
-            restarts when it has the whole update.
+            Hub <strong className="num">{pkg.version}</strong>{pkg.signed ? '' : ' (unsigned)'} goes over the radio as {formatMegabytes(pkg.packedBytes / 1_000_000)}: {minutesText(pkg.packedBytes / RADIO_BYTES_PER_SEC)} per
+            node one hop away, longer further. It uses about half the airtime and pauses while someone talks. A transfer cut short goes on where it stopped.
           </p>
-          <NodeNames nodes={nodes} note={(peer) => outOfRange(peer) ?? (peer.version === release.data.version ? 'already on this version' : `now ${peer.version}`)} />
+          <NodeNames nodes={nodes} note={(peer) => outOfRange(peer) ?? (peer.version === pkg.version ? 'already on this version' : `now ${peer.version}`)} />
           {error ? <Notice tone="danger">{errorMessage(error)}</Notice> : null}
           <Buttons onClose={onClose} busy={busy}>
-            <Button variant="primary" busy={busy} disabled={behind.length === 0} onClick={() => start({ kind: 'update' })}>
+            <Button variant="primary" busy={busy} disabled={behind.length === 0} onClick={() => start({ kind: 'update', packageId: pkg.id })}>
               Update {countOf(behind)}
             </Button>
           </Buttons>

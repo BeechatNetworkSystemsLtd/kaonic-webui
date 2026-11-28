@@ -1,5 +1,7 @@
-import type { NodeJob, NodeJobKind } from '@/api';
-import { Status, type Tone } from '@/ui';
+import { X } from 'lucide-react';
+import { errorMessage, type NodeJob, type NodeJobKind } from '@/api';
+import { useCancelJob } from '@/data/queries';
+import { Button, Status, type Tone } from '@/ui';
 import styles from './jobs.module.css';
 
 /* How a job on another node is talked about and shown, wherever it appears. */
@@ -33,7 +35,10 @@ const SHORT: Record<NodeJob['kind'], Record<NodeJob['state'], string>> = {
  * a table cell, where the full reason for a failure is in the tooltip.
  */
 export function JobStatus({ job, compact }: { job: NodeJob; compact?: boolean }) {
+  const cancel = useCancelJob();
   const percent = Math.round(job.progress * 100);
+  // An update runs in the background for minutes: it can be stopped, and keeps what the node has.
+  const stoppable = job.kind === 'update' && isActive(job);
   const gradual = job.state === 'running' && job.kind === 'update';
   const text = compact ? `${SHORT[job.kind][job.state]}${gradual ? ` ${percent}%` : ''}` : `${job.detail}${gradual ? `, ${percent}%` : ''}`;
   return (
@@ -43,6 +48,19 @@ export function JobStatus({ job, compact }: { job: NodeJob; compact?: boolean })
         <span className={styles.track} role="progressbar" aria-label={JOB_NAMES[job.kind]} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <span className={styles.fill} style={{ width: `${percent}%` }} />
         </span>
+      ) : null}
+      {stoppable ? (
+        <Button
+          size="small"
+          variant="ghost"
+          iconOnly
+          aria-label="Stop the update"
+          title={cancel.isError ? errorMessage(cancel.error) : 'Stop the update'}
+          busy={cancel.isPending}
+          onClick={() => cancel.mutate(job.id)}
+        >
+          <X size={14} aria-hidden />
+        </Button>
       ) : null}
     </span>
   );

@@ -53,6 +53,11 @@ export function formatAgo(timestampSecs: number, nowMs: number = Date.now()): st
   return `${formatDuration(elapsed)} ago`;
 }
 
+/** When a node was last heard, for an out-of-range one: a known node may never have been. */
+export function seenText(lastSeenTs: number, prefix = 'Seen'): string {
+  return lastSeenTs > 0 ? `${prefix} ${formatAgo(lastSeenTs)}` : 'Not heard yet';
+}
+
 /** "a41f..6e30": the first and last four characters, enough of a hash to recognise it. */
 export function shortHash(hash: string): string {
   return hash.length > 10 ? `${hash.slice(0, 4)}..${hash.slice(-4)}` : hash;
