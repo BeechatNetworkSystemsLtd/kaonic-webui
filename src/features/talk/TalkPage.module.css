@@ -382,6 +382,12 @@
 .advanced {
   margin: var(--s5) 0 var(--s4);
 }
+.settingsActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
 .rangeBlock {
   display: grid;
   gap: var(--s2);
@@ -549,9 +555,6 @@
   color: var(--text-muted);
 }
 .nodeAdmin {
-  position: absolute;
-  top: 4px;
-  right: 4px;
   color: var(--admin);
   font-size: 9px;
   font-weight: 700;

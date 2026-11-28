@@ -289,12 +289,13 @@ function NodeGrid({ state, talker }: { state: PttState; talker: PttTalker | null
   // The hub keeps the last bursts; the current talker counts from when it took the floor.
   const talked = lastTalked(new Map(), state.recent, talker, state.floor.sinceTs ?? 0);
   const tiles = talkTiles(peers, null, talker, talked);
+  const online = tiles.filter((tile) => tile.online).length;
   return (
     <div className={styles.network}>
       <div className={styles.networkHead}>
         <h2 className={styles.subtitle}>Users</h2>
         <span className={`${styles.muted} num`}>
-          {tiles.length} {tiles.length === 1 ? 'user' : 'users'}
+          {online === tiles.length ? `${tiles.length} ${tiles.length === 1 ? 'user' : 'users'}` : `${online} of ${tiles.length} online`}
         </span>
       </div>
       <ul className={styles.nodeGrid} aria-label="Users of the network">
@@ -310,7 +311,7 @@ function NodeGrid({ state, talker }: { state: PttState; talker: PttTalker | null
           >
             {tile.talking ? <Volume2 className={styles.nodeIcon} aria-hidden="true" /> : <RadioTower className={styles.nodeIcon} aria-hidden="true" />}
             <span className={styles.nodeName}>{tile.self ? 'you' : tile.codename}</span>
-            <span className={`${styles.nodeId} num`}>{tile.hops !== null ? hopsText(tile.hops) : tile.id.slice(0, 8)}</span>
+            <span className={`${styles.nodeId} num`}>{tile.hops !== null ? hopsText(tile.hops) : tile.online || tile.self ? tile.id.slice(0, 8) : 'Not heard'}</span>
             {tile.rssi !== null ? <Signal rssi={tile.rssi} /> : null}
             {tile.isAdmin ? <span className={styles.nodeAdmin}>ADMIN</span> : null}
           </li>

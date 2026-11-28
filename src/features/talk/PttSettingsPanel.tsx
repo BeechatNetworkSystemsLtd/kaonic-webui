@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { validationFields, type PttAudioDevice, type PttSettings, type PttState } from '@/api';
-import { PTT_RANGES, pttSettingsProblems } from '@/api/pttSettings';
+import { DEFAULT_PTT_SETTINGS, PTT_RANGES, pttSettingsProblems } from '@/api/pttSettings';
 import { usePttDevices, usePttTestTone, useUpdatePttSettings } from '@/data/queries';
 import { Button, FormError, Notice, Panel, Segmented, Select, Switch } from '@/ui';
 import { RangeSetting, Row } from './controls';
@@ -96,6 +96,7 @@ export function PttSettingsPanel({ state, canChange, inputLevel }: { state: PttS
   const devices = usePttDevices(state.audio.device);
   const [local, setLocal] = useState<Errors>({});
   const [advanced, setAdvanced] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const errors: Errors = { ...(validationFields(update.error) as Errors), ...local };
   const off = !canChange;
   const noAudio = !state.audio.device;
@@ -160,10 +161,33 @@ export function PttSettingsPanel({ state, canChange, inputLevel }: { state: PttS
         </div>
         <FormError error={update.error ?? tone.error} />
 
-        <div className={styles.advanced}>
+        <div className={`${styles.advanced} ${styles.settingsActions}`}>
           <Button size="small" aria-expanded={advanced} aria-controls="ptt-advanced" onClick={() => setAdvanced((open) => !open)}>
             {advanced ? 'Hide advanced' : 'Advanced'}
           </Button>
+          {resetting ? (
+            <>
+              <span className={styles.muted}>Every talk setting goes back to its default.</span>
+              <Button
+                size="small"
+                variant="primary"
+                busy={update.isPending}
+                onClick={() => {
+                  setLocal({});
+                  update.mutate(DEFAULT_PTT_SETTINGS, { onSuccess: () => setResetting(false) });
+                }}
+              >
+                Reset
+              </Button>
+              <Button size="small" disabled={update.isPending} onClick={() => setResetting(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button size="small" variant="ghost" disabled={off} onClick={() => setResetting(true)}>
+              Reset to defaults
+            </Button>
+          )}
         </div>
         {advanced ? (
           <div id="ptt-advanced" className={styles.groups}>
