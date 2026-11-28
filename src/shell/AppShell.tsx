@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { X } from 'lucide-react';
-import { useLiveSync } from '@/data/queries';
+import { useAutoClock, useLiveSync } from '@/data/queries';
 import { BREAKPOINTS, useMediaQuery } from '@/lib/useMediaQuery';
 import { Button } from '@/ui';
 import { Header } from './Header';
@@ -23,6 +23,7 @@ type Drawer = { side: 'nav' | 'rail'; path: string } | null;
  */
 export function AppShell({ children }: { children: ReactNode }) {
   useLiveSync();
+  useAutoClock();
   const navDocked = useMediaQuery(BREAKPOINTS.nav);
   const railDocked = useMediaQuery(BREAKPOINTS.rail);
   const { pathname } = useLocation();

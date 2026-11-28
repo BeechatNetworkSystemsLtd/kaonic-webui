@@ -1,22 +1,22 @@
 import { useState, type FormEvent } from 'react';
 import { errorMessage } from '@/api';
-import { useAuthState, useDevice, useFactoryReset, useMetrics, useReboot, useRestartService, useServices, useSystemReport } from '@/data/queries';
+import { useAuthState, useDevice, useFactoryReset, useMetrics, useReboot, useSystemReport } from '@/data/queries';
 import { formatDuration, formatMegabytes } from '@/lib/format';
 import { Page, PanelGrid } from '@/shell/Page';
-import { Button, Field, Input, KeyValues, LoadError, Meter, Notice, Panel, Skeleton, Status } from '@/ui';
+import { Button, Field, Input, KeyValues, LoadError, Meter, Notice, Panel, Skeleton } from '@/ui';
 import { SoftwarePanel } from './SoftwarePanel';
 import { OsPanel } from './UpdateOs';
 import { PagesPanel } from './PagesPanel';
+import { DeviceClock } from './DeviceClock';
 import styles from './SystemPage.module.css';
 
 export default function SystemPage() {
   const admin = useAuthState().data?.role === 'admin';
   return (
-    <Page title="System" description="Device details, services and maintenance.">
+    <Page title="System" description="Device details, software and maintenance.">
       <PanelGrid min={340}>
-        <DevicePanel />
+        <DevicePanel admin={admin} />
         <HealthPanel />
-        <ServicesPanel />
       </PanelGrid>
       <OsPanel admin={admin} />
       <PagesPanel admin={admin} />
@@ -26,7 +26,7 @@ export default function SystemPage() {
   );
 }
 
-function DevicePanel() {
+function DevicePanel({ admin }: { admin: boolean }) {
   const device = useDevice();
   return (
     <Panel title="This device">
@@ -39,6 +39,7 @@ function DevicePanel() {
             ['Hostname', <span className="mono">{device.data.hostname}.local</span>],
             ['Identity', <span className="mono">{device.data.identityHash}</span>],
             ['Radio modules', device.data.radioModules],
+            ['Time', <DeviceClock admin={admin} />],
             ['Uptime', formatDuration(device.data.uptimeSecs)],
             ['Hub', device.data.versions.hub],
             ['Web UI', device.data.versions.webui ?? '–'],
@@ -68,34 +69,6 @@ function HealthPanel() {
           />
         </div>
       )}
-    </Panel>
-  );
-}
-
-function ServicesPanel() {
-  const services = useServices();
-  const restart = useRestartService();
-  return (
-    <Panel title="Services">
-      {services.isPending ? <Skeleton /> : services.isError ? <LoadError error={services.error} onRetry={() => void services.refetch()} /> : (
-        <ul className={styles.services}>
-          {services.data.map((service) => (
-            <li key={service.unit} className={styles.service}>
-              <div>
-                <p className={styles.serviceName}>{service.name}</p>
-                <p className={`${styles.unit} mono`}>{service.unit}{service.version ? ` ${service.version}` : ''}</p>
-              </div>
-              <Status tone={service.state === 'active' ? 'ok' : service.state === 'failed' ? 'danger' : 'neutral'}>
-                {service.state === 'active' ? 'Running' : service.state === 'failed' ? 'Failed' : 'Stopped'}
-              </Status>
-              <Button size="small" busy={restart.isPending && restart.variables === service.unit} onClick={() => restart.mutate(service.unit)}>
-                Restart
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {restart.isError ? <Notice tone="danger">{errorMessage(restart.error)}</Notice> : null}
     </Panel>
   );
 }
@@ -152,6 +125,7 @@ function MaintenancePanel({ admin }: { admin: boolean }) {
   const reboot = useReboot();
   const reset = useFactoryReset();
   const [confirming, setConfirming] = useState(false);
+  const needsPassword = useAuthState().data?.passwordSet ?? true;
   const [password, setPassword] = useState('');
 
   function onReset(event: FormEvent) {
@@ -182,11 +156,15 @@ function MaintenancePanel({ admin }: { admin: boolean }) {
         </div>
         {confirming ? (
           <form className={styles.confirm} onSubmit={onReset}>
-            <Field label="Enter the password to confirm" error={reset.isError ? errorMessage(reset.error) : undefined}>
-              {(control) => (
-                <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />
-              )}
-            </Field>
+            {needsPassword ? (
+              <Field label="Enter the password to confirm" error={reset.isError ? errorMessage(reset.error) : undefined}>
+                {(control) => (
+                  <Input {...control} type="password" autoComplete="current-password" autoFocus required value={password} onChange={(event) => setPassword(event.target.value)} />
+                )}
+              </Field>
+            ) : reset.isError ? (
+              <Notice tone="danger">{errorMessage(reset.error)}</Notice>
+            ) : null}
             <div className={styles.confirmActions}>
               <Button type="submit" variant="danger" busy={reset.isPending}>Erase everything</Button>
               <Button onClick={() => { setConfirming(false); setPassword(''); reset.reset(); }}>Cancel</Button>
