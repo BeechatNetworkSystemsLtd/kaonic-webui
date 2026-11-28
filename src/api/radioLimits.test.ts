@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { maxTxPower, testPayload, testProblems } from './radioLimits';
+import type { Modulation, TxPowerMax } from './types';
 
 describe('radio limits', () => {
-  it('allows 25 with OFDM, 20 with QPSK and FSK', () => {
-    expect([maxTxPower('ofdm'), maxTxPower('qpsk'), maxTxPower('fsk'), maxTxPower('off')]).toEqual([25, 20, 20, 31]);
+  it('takes the band\'s limits, else 25 with OFDM and 20 with QPSK and FSK', () => {
+    const ofdm = (mcs: number, limits?: TxPowerMax) => maxTxPower({ kind: 'ofdm', mcs, option: 1 } as Modulation, limits);
+    expect([0, 3, 6].map((mcs) => ofdm(mcs))).toEqual([25, 25, 25]);
+    expect([maxTxPower({ kind: 'qpsk' } as Modulation), maxTxPower({ kind: 'fsk' } as Modulation), maxTxPower({ kind: 'off' })]).toEqual([20, 20, 31]);
+    const kaonic1x: TxPowerMax = { ofdm: [25, 25, 25, 25, 23, 21, 19], qpsk: [20, 20, 20, 18, 18], fsk: [20, 20, 20, 20, 17, 16] };
+    expect([0, 3, 4, 5, 6].map((mcs) => ofdm(mcs, kaonic1x))).toEqual([25, 25, 23, 21, 19]);
+    // O-QPSK by rate mode, FSK by symbol rate.
+    expect(maxTxPower({ kind: 'qpsk', chipRateKhz: 1000, rateMode: 4 }, kaonic1x)).toBe(18);
+    expect(maxTxPower({ kind: 'fsk', symbolRateKhz: 400 }, kaonic1x)).toBe(16);
+    expect(maxTxPower({ kind: 'fsk', symbolRateKhz: 100 }, kaonic1x)).toBe(20);
   });
 
   it('reads a test message as text or hex bytes, up to one frame', () => {

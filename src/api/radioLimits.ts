@@ -1,4 +1,4 @@
-import type { Modulation, RadioTestRequest } from './types';
+import type { Modulation, RadioTestRequest, TxPowerMax } from './types';
 
 /**
  * The radio limits the hub enforces, so the page can show them before sending and the mock
@@ -7,12 +7,40 @@ import type { Modulation, RadioTestRequest } from './types';
 
 export type FieldErrors = Record<string, string>;
 
-/** The TX power register goes to 31; the hub allows 25 with OFDM and 20 with QPSK and FSK. */
+/** The TX power register goes to 31. */
 export const TX_POWER_REGISTER_MAX = 31;
-export const TX_POWER_MAX: Record<Modulation['kind'], number> = { ofdm: 25, qpsk: 20, fsk: 20, off: TX_POWER_REGISTER_MAX };
+/** OFDM MCS 0 to 6. */
+export const OFDM_MCS_COUNT = 7;
+/** O-QPSK rate modes 0 to 4. */
+export const QPSK_RATE_MODE_COUNT = 5;
+/** The FSK symbol rates the radio offers, in kHz; the FSK limits come in this order. */
+export const FSK_SYMBOL_RATES_KHZ = [50, 100, 150, 200, 300, 400] as const;
 
-export function maxTxPower(kind: Modulation['kind']): number {
-  return TX_POWER_MAX[kind];
+/** What a hub too old to report its board's limits allows: 25 with OFDM, 20 with QPSK and FSK. */
+export const TX_POWER_MAX_FALLBACK: TxPowerMax = {
+  ofdm: Array<number>(OFDM_MCS_COUNT).fill(25),
+  qpsk: Array<number>(QPSK_RATE_MODE_COUNT).fill(20),
+  fsk: Array<number>(FSK_SYMBOL_RATES_KHZ.length).fill(20),
+};
+
+/** The limit at `index`; out of range, the lowest of the table. */
+function rate(limits: number[], index: number): number {
+  return limits[index] ?? Math.min(...limits, TX_POWER_REGISTER_MAX);
+}
+
+/** The highest TX power with this modulation, from the band's limits as the board reports them. */
+export function maxTxPower(modulation: Modulation, limits: TxPowerMax = TX_POWER_MAX_FALLBACK): number {
+  switch (modulation.kind) {
+    case 'ofdm':
+      return rate(limits.ofdm, modulation.mcs);
+    case 'qpsk':
+      return rate(limits.qpsk, modulation.rateMode);
+    case 'fsk':
+      // Without a symbol rate: the lowest of the table.
+      return rate(limits.fsk, FSK_SYMBOL_RATES_KHZ.findIndex((khz) => khz === modulation.symbolRateKhz));
+    case 'off':
+      return TX_POWER_REGISTER_MAX;
+  }
 }
 
 /** One frame of the transceiver. */

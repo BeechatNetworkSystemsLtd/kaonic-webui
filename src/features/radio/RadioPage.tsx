@@ -154,7 +154,7 @@ function BandForm({ band }: { band: RadioBand }) {
           <Dialog title="Change the mesh band on every node?" onClose={() => setConfirming(false)}>
             <p>
               The new setting ({formatFrequency(centreHz(draft.config))}, {draft.config.modulation.kind.toUpperCase()}) goes to every node this device has a link
-              to. All of them, this one included, switch in 10 seconds.
+              to. All of them, this one included, switch together: in 10 seconds, or right away with <strong>Switch now</strong>.
             </p>
             <p>
               Nodes that are out of reach now do not get it and stay on the old setting. A node that hears no other node within a minute of switching goes back
@@ -166,13 +166,22 @@ function BandForm({ band }: { band: RadioBand }) {
               </Button>
               <Button
                 type="button"
-                variant="primary"
                 onClick={() => {
                   setConfirming(false);
                   everywhere.mutate({ id: band.id, config: draft.config });
                 }}
               >
-                Switch every node
+                Switch in 10 s
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setConfirming(false);
+                  everywhere.mutate({ id: band.id, config: draft.config, now: true });
+                }}
+              >
+                Switch now
               </Button>
             </div>
           </Dialog>

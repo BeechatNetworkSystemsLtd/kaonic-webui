@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { CcaConfig, FrontendConfig, Modulation, RadioCapability, RadioConfig } from '@/api';
-import { maxTxPower } from '@/api/radioLimits';
+import type { CcaConfig, FrontendConfig, Modulation, RadioCapability, RadioConfig, TxPowerMax } from '@/api';
+import { FSK_SYMBOL_RATES_KHZ, maxTxPower } from '@/api/radioLimits';
 import { formatFrequency } from '@/lib/format';
 import { Button, Field, Input, Select, Switch } from '@/ui';
 import styles from './RadioConfigFields.module.css';
@@ -16,13 +16,12 @@ const MODULATION_LABELS: Record<Modulation['kind'], string> = { off: 'Off', ofdm
 const MODULATION_DEFAULTS: { [K in Modulation['kind']]: Extract<Modulation, { kind: K }> } = {
   off: { kind: 'off' },
   fsk: { kind: 'fsk', symbolRateKhz: 200, modulationIndex: 1, order: 2, bt: 0.5, fec: false, whitening: true, preamble: 8 },
-  ofdm: { kind: 'ofdm', mcs: 6, option: 1 },
+  ofdm: { kind: 'ofdm', mcs: 3, option: 1 },
   qpsk: { kind: 'qpsk', chipRateKhz: 100, rateMode: 0 },
 };
 
 const OFDM_MCS = ['BPSK 1/2, 4x repeat', 'BPSK 1/2, 2x repeat', 'QPSK 1/2, 2x repeat', 'QPSK 1/2', 'QPSK 3/4', '16-QAM 1/2', '16-QAM 3/4'];
 
-const FSK_SYMBOL_RATES = [50, 100, 150, 200, 300, 400];
 const FSK_MODULATION_INDEX = [0.375, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const FSK_BT = [0.5, 1, 1.5, 2];
 const CCA_DEFAULT: CcaConfig = { enabled: true, thresholdDbm: -80, listenUs: 0, retries: 96, backoffUs: 500 };
@@ -34,6 +33,8 @@ export interface FrequencyLimits {
   maxHz: number;
   /** The ranges the channel centre must fall in (sub-GHz has two); defaults to min..max. */
   rangesHz?: [number, number][];
+  /** The board's TX power limits; the usual ones when the hub does not report them. */
+  txPowerMax?: TxPowerMax;
 }
 
 /** The RF215 tunes to frequency + channel × spacing. */
@@ -56,7 +57,7 @@ function describeRanges(limits: FrequencyLimits): string {
 export function draftProblems(config: RadioConfig, limits: FrequencyLimits): Record<string, string> {
   const problems: Record<string, string> = {};
   if (config.modulation.kind === 'off') return problems;
-  const maxPower = maxTxPower(config.modulation.kind);
+  const maxPower = maxTxPower(config.modulation, limits.txPowerMax);
   if (!Number.isInteger(config.txPower) || config.txPower < 0 || config.txPower > maxPower) problems.txPower = `Use 0 to ${maxPower} with this modulation.`;
   if (!centreInBand(centreHz(config), limits)) {
     problems.frequencyHz = `The channel centre ${formatFrequency(centreHz(config))} is outside ${describeRanges(limits)}.`;
@@ -96,7 +97,7 @@ export interface RadioDraft {
 /** Editing state for one band's settings, starting from the saved ones. */
 export function useRadioDraft(saved: RadioConfig, limits: FrequencyLimits): RadioDraft {
   // A node on older software may run above today's limit: the draft starts within it.
-  const [config, setConfig] = useState<RadioConfig>(() => ({ ...saved, txPower: Math.min(saved.txPower, maxTxPower(saved.modulation.kind)) }));
+  const [config, setConfig] = useState<RadioConfig>(() => ({ ...saved, txPower: Math.min(saved.txPower, maxTxPower(saved.modulation, limits.txPowerMax)) }));
   // The frequency is kept as typed, so half-entered numbers are not rewritten under the cursor.
   const [frequencyMhz, setFrequencyMhz] = useState(String(saved.frequencyHz / 1_000_000));
 
@@ -146,7 +147,7 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
             onChange={(event) => {
               const kind = event.target.value as Modulation['kind'];
               // A lower limit brings the power down with it.
-              patch({ modulation: MODULATION_DEFAULTS[kind], txPower: Math.min(config.txPower, maxTxPower(kind)) });
+              patch({ modulation: MODULATION_DEFAULTS[kind], txPower: Math.min(config.txPower, maxTxPower(MODULATION_DEFAULTS[kind], limits.txPowerMax)) });
             }}
           >
             {kinds.map((kind) => (
@@ -160,7 +161,10 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
         <div className={styles.pair}>
           <Field label="Rate" hint="Lower rates reach further.">
             {(control) => (
-              <Select {...control} value={modulation.mcs} onChange={(event) => patch({ modulation: { ...modulation, mcs: Number(event.target.value) } })}>
+              <Select {...control} value={modulation.mcs} onChange={(event) => {
+                  const next = { ...modulation, mcs: Number(event.target.value) };
+                  patch({ modulation: next, txPower: Math.min(config.txPower, maxTxPower(next, limits.txPowerMax)) });
+                }}>
                 {OFDM_MCS.map((label, mcs) => (
                   <option key={mcs} value={mcs}>{label}</option>
                 ))}
@@ -208,7 +212,7 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
             <Field label="Symbol rate">
               {(control) => (
                 <Select {...control} value={modulation.symbolRateKhz ?? 200} onChange={(event) => patch({ modulation: { ...modulation, symbolRateKhz: Number(event.target.value) } })}>
-                  {FSK_SYMBOL_RATES.map((rate) => (
+                  {FSK_SYMBOL_RATES_KHZ.map((rate) => (
                     <option key={rate} value={rate}>{rate} ksym/s</option>
                   ))}
                 </Select>
@@ -286,8 +290,8 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
             </Field>
           </div>
           <Field
-            label={`Transmit power: ${config.txPower} of ${maxTxPower(modulation.kind)}`}
-            hint={`Use the lowest power that keeps the link stable. The limit is ${maxTxPower('ofdm')} with OFDM and ${maxTxPower('qpsk')} with QPSK and FSK.`}
+            label={`Transmit power: ${config.txPower} of ${maxTxPower(modulation, limits.txPowerMax)}`}
+            hint="Use the lowest power that keeps the link stable. The limit is set by this board, per modulation."
             error={errors.txPower ?? problems.txPower}
           >
             {(control) => (
@@ -296,8 +300,8 @@ export function RadioConfigFields({ draft, errors = {}, capabilities = [] }: Rad
                 className={styles.range}
                 type="range"
                 min={0}
-                max={maxTxPower(modulation.kind)}
-                value={Math.min(config.txPower, maxTxPower(modulation.kind))}
+                max={maxTxPower(modulation, limits.txPowerMax)}
+                value={Math.min(config.txPower, maxTxPower(modulation, limits.txPowerMax))}
                 onChange={(event) => patch({ txPower: Number(event.target.value) })}
               />
             )}
